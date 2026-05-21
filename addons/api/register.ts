@@ -309,6 +309,10 @@ function withDefaults(config?: ApiModuleConfig): Required<ApiModuleConfig> {
 	const port = Number(config?.port ?? 8787);
 	const publicUrl = String(config?.publicUrl ?? `http://localhost:${port}`);
 	const dashboardUrl = String(config?.dashboardUrl ?? 'http://localhost:5173');
+	const dashboardProxyCallback = `${dashboardUrl.replace(
+		/\/+$/,
+		'',
+	)}/api/priyx/auth/callback`;
 	return {
 		enabled: Boolean(config?.enabled ?? false),
 		host,
@@ -318,9 +322,7 @@ function withDefaults(config?: ApiModuleConfig): Required<ApiModuleConfig> {
 		corsOrigin: String(config?.corsOrigin ?? dashboardUrl),
 		sessionTtl: Number(config?.sessionTtl ?? 86_400),
 		invitePermissions: String(config?.invitePermissions ?? '8'),
-		oauthRedirectUri: String(
-			config?.oauthRedirectUri ?? `${publicUrl}/api/auth/callback`,
-		),
+		oauthRedirectUri: String(config?.oauthRedirectUri ?? dashboardProxyCallback),
 		requireApiKey: Boolean(config?.requireApiKey ?? true),
 	};
 }

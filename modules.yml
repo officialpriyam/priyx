@@ -57,6 +57,7 @@ api:
   publicUrl: "http://localhost:8787"
   dashboardUrl: "http://localhost:5173"
   corsOrigin: "http://localhost:5173"
+  oauthRedirectUri: "http://localhost:5173/api/priyx/auth/callback"
   sessionTtl: 86400
   invitePermissions: "8"
   requireApiKey: true
