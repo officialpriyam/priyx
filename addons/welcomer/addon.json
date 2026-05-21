@@ -1,0 +1,11 @@
+{
+  "name": "welcomer",
+  "description": "Welcome, farewell, DM, and card settings.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 57,
+  "dependencies": [
+    "core"
+  ]
+}

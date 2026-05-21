@@ -1,0 +1,11 @@
+{
+  "name": "adventure",
+  "description": "Adventure profiles, inventory, and combat state.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 55,
+  "dependencies": [
+    "core"
+  ]
+}

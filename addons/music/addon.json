@@ -1,0 +1,11 @@
+{
+  "name": "music",
+  "description": "Optional music queue and playback state.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 54,
+  "dependencies": [
+    "core"
+  ]
+}

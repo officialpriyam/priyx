@@ -1,0 +1,11 @@
+{
+  "name": "ai",
+  "description": "AI chat history, user facts, and translation state.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 65,
+  "dependencies": [
+    "core"
+  ]
+}

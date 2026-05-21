@@ -1,0 +1,11 @@
+{
+  "name": "giveaway",
+  "description": "Giveaway entries, winners, and schedules.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 61,
+  "dependencies": [
+    "core"
+  ]
+}

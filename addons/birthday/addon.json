@@ -1,0 +1,11 @@
+{
+  "name": "birthday",
+  "description": "Birthday dates, roles, and announcements.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 68,
+  "dependencies": [
+    "core"
+  ]
+}

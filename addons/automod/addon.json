@@ -1,0 +1,11 @@
+{
+  "name": "automod",
+  "description": "Automated moderation rules and logs.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 51,
+  "dependencies": [
+    "core"
+  ]
+}

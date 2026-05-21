@@ -1,0 +1,11 @@
+{
+  "name": "leveling",
+  "description": "XP, levels, rank cards, and level roles.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 53,
+  "dependencies": [
+    "core"
+  ]
+}

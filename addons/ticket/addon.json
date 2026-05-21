@@ -1,0 +1,11 @@
+{
+  "name": "ticket",
+  "description": "Ticket panels, channels, claims, and transcripts.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 59,
+  "dependencies": [
+    "core"
+  ]
+}

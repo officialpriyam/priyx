@@ -1,0 +1,11 @@
+{
+  "name": "embed-builder",
+  "description": "Saved embeds and component builder state.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 72,
+  "dependencies": [
+    "core"
+  ]
+}

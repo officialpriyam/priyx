@@ -1,0 +1,11 @@
+{
+  "name": "invite",
+  "description": "Invite tracking and leaderboard data.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 69,
+  "dependencies": [
+    "core"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "economy",
+  "description": "Coins, wallets, banks, shops, and rewards.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 52,
+  "dependencies": [
+    "core"
+  ]
+}

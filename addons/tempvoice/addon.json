@@ -1,0 +1,11 @@
+{
+  "name": "tempvoice",
+  "description": "Temporary voice configuration and ownership.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 62,
+  "dependencies": [
+    "core"
+  ]
+}

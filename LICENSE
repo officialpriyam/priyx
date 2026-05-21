@@ -1,0 +1,19 @@
+Priyx Source License
+
+Copyright (c) 2026 Priyx.
+
+Permission is granted to use, modify, and self-host this software for personal,
+community, and internal server use, subject to the following conditions:
+
+1. Priyx attribution must remain in official bot branding, documentation,
+   and source notices.
+2. Private source code, private assets, and private configuration examples may
+   not be resold, leaked, or redistributed without written permission from
+   Priyx.
+3. You may not claim Priyx or its core architecture as your own original product.
+4. Secrets, tokens, and private credentials must never be committed to the
+   repository.
+5. The software is provided as-is, without warranty of any kind.
+
+Priyx is not liable for claims, damages, data loss, service interruption,
+or other liability arising from use of this software.

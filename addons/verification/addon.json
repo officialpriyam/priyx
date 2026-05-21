@@ -1,0 +1,11 @@
+{
+  "name": "verification",
+  "description": "Verification panels, roles, and captcha sessions.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 58,
+  "dependencies": [
+    "core"
+  ]
+}

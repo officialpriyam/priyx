@@ -1,0 +1,11 @@
+{
+  "name": "social-alerts",
+  "description": "Social platform alert subscriptions.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 67,
+  "dependencies": [
+    "core"
+  ]
+}

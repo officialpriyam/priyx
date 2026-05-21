@@ -1,0 +1,11 @@
+{
+  "name": "streak",
+  "description": "Activity streak progress and reset state.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 74,
+  "dependencies": [
+    "core"
+  ]
+}

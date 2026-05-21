@@ -1,0 +1,11 @@
+{
+  "name": "image",
+  "description": "Image asset registry and output settings.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 73,
+  "dependencies": [
+    "core"
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "fun",
+  "description": "Trivia, word games, and casual commands.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 64,
+  "dependencies": [
+    "core"
+  ]
+}

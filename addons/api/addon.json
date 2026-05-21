@@ -1,0 +1,6 @@
+{
+	"name": "api",
+	"description": "HTTP API and Discord OAuth bridge for the Priyx dashboard.",
+	"version": "1.0.0",
+	"author": "Priyx"
+}

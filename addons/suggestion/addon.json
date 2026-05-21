@@ -1,0 +1,11 @@
+{
+  "name": "suggestion",
+  "description": "Suggestion submissions, votes, and statuses.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 60,
+  "dependencies": [
+    "core"
+  ]
+}

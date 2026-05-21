@@ -1,0 +1,282 @@
+# Priyx module configuration template.
+# Secrets stay in .env. Feature settings stay in modules.yml.
+bot:
+  name: Priyx
+  studio: Priyx
+  developer: Priyx
+  version: 1.0.0
+  prefix: "!"
+  sharding:
+    totalShards: auto
+  database:
+    sync: false
+    logging: false
+  redis:
+    enabled: false
+    host: localhost
+    port: 6379
+    db: 0
+    keyPrefix: "priyx:"
+    ttl: { default: 300, cooldown: 60, leaderboard: 120, userdata: 600 }
+
+colors:
+  primary: "#6C63FF"
+  success: "#57F287"
+  warning: "#FEE75C"
+  error: "#ED4245"
+  info: "#5865F2"
+  economy: "#F1C40F"
+  xp: "#9B59B6"
+  music: "#1DB954"
+
+presence:
+  status: online
+  activities:
+    - { name: "/help | Priyx", type: LISTENING }
+
+core: { enabled: true, defaultCooldown: 3, ownerGuildId: "", logChannel: "", errorChannel: "", maintenanceMessage: "Priyx is in maintenance." }
+api:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8787
+  publicUrl: "http://localhost:8787"
+  dashboardUrl: "http://localhost:5173"
+  corsOrigin: "http://localhost:5173"
+  sessionTtl: 86400
+  invitePermissions: "8"
+  requireApiKey: true
+automod: { enabled: true }
+economy: { enabled: true }
+leveling: { enabled: true }
+welcomer:
+  enabled: true
+  channel: ""
+  messageType: embed
+  message: "Welcome {user} to {server}! You are member #{count}."
+  deleteAfter: 0
+  mentionUser: true
+  assignRoles: []
+  embed:
+    title: "Welcome to {server}"
+    description: "Hey {user}, you are member #{count}. Read the rules and enjoy your stay."
+    color: "#6C63FF"
+    authorName: "{username}"
+    authorIcon: "{avatar}"
+    thumbnail: "{avatar}"
+    image: ""
+    footer: "Priyx Welcomer"
+    timestamp: true
+    fields:
+      - { name: "Account", value: "{tag}", inline: true }
+      - { name: "Server", value: "{server}", inline: true }
+  farewell:
+    enabled: true
+    channel: ""
+    messageType: embed
+    message: "{username} has left the server. Goodbye!"
+    deleteAfter: 0
+    embed:
+      title: "Goodbye {username}"
+      description: "{username} has left {server}."
+      color: "#ED4245"
+      thumbnail: "{avatar}"
+      footer: "Priyx Welcomer"
+      timestamp: true
+      fields: []
+  dm:
+    enabled: false
+    messageType: plain
+    message: "Welcome to {server}! Check out our rules."
+    embed:
+      title: "Welcome to {server}"
+      description: "Thanks for joining. Start by reading the rules and picking your roles."
+      color: "#6C63FF"
+      thumbnail: "{avatar}"
+      footer: "Priyx Welcomer"
+      timestamp: true
+      fields: []
+  card:
+    enabled: true
+    background: "#23272A"
+    textColor: "#FFFFFF"
+    accentColor: "#6C63FF"
+    layout: modern
+    avatarShape: circle
+    showMemberCount: true
+
+# Ticket setup:
+# 1. Create a public support channel for the panel.
+# 2. Create a private ticket category if you want ticket channels grouped.
+# 3. Run /ticket setup, open Buttons, edit each button/option, and select its category.
+# 4. Choose panel_channel, fallback ticket_category, support_role, and transcript_channel.
+# 5. Use /ticket panel later to post another panel with the saved server setup.
+# Leave IDs blank in this template. Multi-guild servers should configure them in Discord.
+ticket:
+  enabled: true
+  category: ""
+  logChannel: ""
+  supportRoles: []
+  transcriptChannel: ""
+  closeOnLeave: false
+  naming: "ticket-{username}"
+  maxOpenPerUser: 1
+  panelStyle: button
+  panel:
+    title: "Support Tickets"
+    description: "Press a button below to open a private support ticket with the server team."
+    color: "#6C63FF"
+    image: ""
+    thumbnail: ""
+  buttons:
+    open: { label: "Open Ticket", emoji: "ticket", style: PRIMARY }
+    close: { label: "Close Ticket", emoji: "lock", style: DANGER }
+    claim: { label: "Claim", emoji: "claim", style: SECONDARY }
+  categories:
+    - { id: support, label: "General Support", emoji: "chat", description: "Get help with general issues", channelId: "" }
+    - { id: report, label: "Report a User", emoji: "alert", description: "Report rule violations", channelId: "" }
+    - { id: appeal, label: "Ban Appeal", emoji: "scale", description: "Appeal a moderation action", channelId: "" }
+suggestion: { enabled: true }
+giveaway: { enabled: true }
+reaction-role: { enabled: true }
+tempvoice: { enabled: true }
+verification: { enabled: true }
+music:
+  enabled: false
+  provider: rainlink
+  defaultVolume: 80
+  maxQueueSize: 500
+  leaveOnEmpty: true
+  leaveOnEmptyDelay: 30
+  leaveOnFinish: false
+  autoplay: false
+  djRole: ""
+  announceChannel: ""
+  searchEngine: youtube
+  ui:
+    updateInterval: 5000
+    suggestionLimit: 5
+    showFilters: true
+    showSuggestions: true
+    artworkStyle: thumbnail
+  lavalink:
+    nodes:
+      - name: primary
+        host: lavalinkv4.serenetia.com
+        port: 443
+        auth: "https://dsc.gg/ajidevserver"
+        secure: true
+        driver: lavalink/v4/koinu
+      - name: backup
+        host: lavalink.jirayu.net
+        port: 13592
+        auth: "youshallnotpass"
+        secure: false
+        driver: lavalink/v4/koinu
+adventure:
+  enabled: true
+  energy: { max: 100, regenPerMinute: 1 }
+  fight: { cooldown: 30, baseHealth: 100, baseDamage: 12, fleePenalty: 10 }
+  lootRates: { common: 0.7, rare: 0.25, legendary: 0.05 }
+  dungeon: { maxDepth: 10, reviveCost: 500, bossEvery: 5 }
+  shop: { refreshInterval: 86400, maxItems: 12 }
+pet:
+  enabled: true
+  maxPets: 3
+  decayInterval: 3600
+  feedCooldown: 300
+  playCooldown: 600
+  stats: { maxHunger: 100, maxHappiness: 100, decayAmount: 5 }
+  gachaRates: { common: 0.75, rare: 0.2, legendary: 0.05 }
+fun:
+  enabled: true
+  trivia: { timeout: 30000, reward: 50 }
+  wordle: { attempts: 6, reward: 100 }
+  rps: { cooldown: 10 }
+  memeSubreddits: [memes, dankmemes]
+ai:
+  enabled: false
+  model: gpt-4o-mini
+  maxTokens: 500
+  systemPrompt: "You are Priyx, a helpful Discord assistant."
+  history: { maxMessages: 20, ttl: 3600 }
+globalchat:
+  enabled: true
+  channel: ""
+  logChannel: ""
+  filterProfanity: true
+  bannedWords: []
+birthday:
+  enabled: true
+  timezone: UTC
+  checkTime: "09:00"
+  message: "Happy birthday, {user}!"
+  role: ""
+invite:
+  enabled: true
+  trackFakeInvites: true
+  leaderboardSize: 10
+  rewardRoles: []
+autoreact:
+  enabled: true
+  maxRules: 50
+  defaultChance: 1
+  matchType: contains
+autoreply:
+  enabled: true
+  matchType: contains
+  maxRules: 50
+  cooldown: 5
+embed-builder:
+  enabled: true
+  maxSavedEmbeds: 25
+  allowV2: true
+  maxJsonLength: 6000
+  defaultMode: embed
+  previewChannel: ""
+  allowedMentions:
+    parse: []
+    roles: []
+    users: []
+    repliedUser: false
+  requireManageMessages: true
+  limits: { maxFields: 25, maxButtons: 5, maxSelectOptions: 25, maxImages: 4 }
+  defaultMessage:
+    type: embed
+    content: ""
+    embed:
+      title: "New Announcement"
+      description: "Write your message here."
+      color: "#6C63FF"
+      authorName: ""
+      authorIcon: ""
+      thumbnail: ""
+      image: ""
+      footer: "Priyx"
+      timestamp: true
+      fields:
+        - { name: "Field title", value: "Field value", inline: false }
+    components:
+      buttons:
+        - { id: "primary", label: "Open", emoji: "", style: PRIMARY, url: "" }
+      selectMenus: []
+  templates:
+    - id: announcement
+      name: Announcement
+      type: embed
+      content: ""
+      embed: { title: "Announcement", description: "Share an update with the server.", color: "#6C63FF", footer: "Priyx", timestamp: true, fields: [] }
+image:
+  enabled: true
+  outputFormat: png
+  maxFileSize: 8388608
+  storage: { provider: local, path: data/images }
+streak:
+  enabled: true
+  activityType: message
+  resetTime: "00:00"
+  graceWindow: 86400
+social-alerts:
+  enabled: true
+  checkInterval: 300
+  maxTracked: 25
+  platforms: { youtube: true, tiktok: true, instagram: true, rss: true }

@@ -1,0 +1,11 @@
+{
+  "name": "globalchat",
+  "description": "Cross-server chat bridge configuration.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 66,
+  "dependencies": [
+    "core"
+  ]
+}

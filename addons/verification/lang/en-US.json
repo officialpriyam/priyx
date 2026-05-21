@@ -1,0 +1,26 @@
+{
+  "addon": "verification",
+  "name": "Verification",
+  "description": "Verification panels, roles, and captcha sessions.",
+  "common": {
+    "enabled": "Module is enabled.",
+    "disabled": "Module is disabled.",
+    "saved": "Settings saved.",
+    "notConfigured": "This module is not configured yet."
+  },
+  "commands": {
+    "panel": {
+      "title": "Verification Panel",
+      "description": "Verification panels, roles, and captcha sessions."
+    }
+  },
+  "components": {
+    "refresh": "Refresh",
+    "confirm": "Confirm",
+    "cancel": "Cancel"
+  },
+  "errors": {
+    "missingPermission": "You do not have permission to use this.",
+    "notInGuild": "Use this command in a server."
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "core",
+  "description": "Core utility, moderation, and settings commands.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 0,
+  "dependencies": []
+}

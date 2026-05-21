@@ -1,0 +1,472 @@
+# Priyx module configuration.
+# Secrets stay in .env. Feature defaults stay here.
+# Server admins can override enabled modules and settings per guild with Discord commands.
+bot:
+  name: Priyx
+  studio: Priyx
+  developer: Priyx
+  version: 1.0.0
+  prefix: "!"
+  sharding:
+    totalShards: auto
+  database:
+    sync: false
+    logging: false
+  redis:
+    enabled: true
+    host: localhost
+    port: 6379
+    db: 0
+    keyPrefix: "priyx:"
+    ttl:
+      default: 300
+      cooldown: 60
+      leaderboard: 120
+      userdata: 600
+
+colors:
+  primary: "#6C63FF"
+  success: "#57F287"
+  warning: "#FEE75C"
+  error: "#ED4245"
+  info: "#5865F2"
+  economy: "#F1C40F"
+  xp: "#9B59B6"
+  music: "#1DB954"
+
+presence:
+  status: online
+  activities:
+    - name: "/help | Priyx"
+      type: LISTENING
+    - name: "{guilds} servers"
+      type: WATCHING
+
+core:
+  enabled: true
+  ownerGuildId: ""
+  maintenanceMessage: "Priyx is currently under maintenance. Try again soon!"
+  logChannel: ""
+  errorChannel: ""
+  defaultCooldown: 3
+
+api:
+  enabled: true
+  host: "127.0.0.1"
+  port: 8787
+  publicUrl: "http://localhost:8787"
+  dashboardUrl: "http://localhost:5173"
+  corsOrigin: "http://localhost:5173"
+  sessionTtl: 86400
+  invitePermissions: "8"
+  requireApiKey: true
+
+automod:
+  enabled: true
+  spam: { threshold: 5, window: 5000, action: mute, muteDuration: 300000 }
+  badwords: { action: delete, logToChannel: true, words: [] }
+  zalgo: { enabled: true, action: delete }
+  duplicates: { enabled: true, threshold: 3 }
+  mentions: { enabled: true, maxMentions: 5, action: warn }
+  invites: { enabled: true, whitelist: [], action: delete }
+  links: { enabled: false, whitelist: [discord.com, youtube.com], action: delete }
+
+economy:
+  enabled: true
+  currency: { name: Coins, emoji: "coin" }
+  daily: { amount: 200, streak_bonus: 50, cooldown: 86400 }
+  work: { min: 50, max: 300, cooldown: 3600 }
+  rob: { enabled: true, successRate: 0.4, cooldown: 7200, minBalance: 100, maxSteal: 0.3 }
+  interest: { rate: 0.005, interval: 3600 }
+  gambling: { maxBet: 10000, houseEdge: 0.05 }
+  shop: { maxItems: 50 }
+
+leveling:
+  enabled: true
+  xpPerMessage: { min: 15, max: 40 }
+  xpCooldown: 60
+  formula: default
+  customFormula: "5 * level^2 + 50 * level + 100"
+  announceChannel: ""
+  announceMessage: "{user} leveled up to Level {level}!"
+  stackRoles: true
+  ignoredChannels: []
+  ignoredRoles: []
+  doubleXpRoles: []
+  rankCard: { background: "#23272A", progressBar: "#6C63FF", font: sans-serif }
+
+welcomer:
+  enabled: true
+  channel: ""
+  messageType: embed
+  message: "Welcome {user} to {server}! You are member #{count}."
+  deleteAfter: 0
+  mentionUser: true
+  assignRoles: []
+  embed:
+    title: "Welcome to {server}"
+    description: "Hey {user}, you are member #{count}. Read the rules and enjoy your stay."
+    color: "#6C63FF"
+    authorName: "{username}"
+    authorIcon: "{avatar}"
+    thumbnail: "{avatar}"
+    image: ""
+    footer: "Priyx Welcomer"
+    timestamp: true
+    fields:
+      - { name: "Account", value: "{tag}", inline: true }
+      - { name: "Server", value: "{server}", inline: true }
+  farewell:
+    enabled: true
+    channel: ""
+    messageType: embed
+    message: "{username} has left the server. Goodbye!"
+    deleteAfter: 0
+    embed:
+      title: "Goodbye {username}"
+      description: "{username} has left {server}."
+      color: "#ED4245"
+      thumbnail: "{avatar}"
+      footer: "Priyx Welcomer"
+      timestamp: true
+      fields: []
+  dm:
+    enabled: false
+    messageType: plain
+    message: "Welcome to {server}! Check out our rules."
+    embed:
+      title: "Welcome to {server}"
+      description: "Thanks for joining. Start by reading the rules and picking your roles."
+      color: "#6C63FF"
+      thumbnail: "{avatar}"
+      footer: "Priyx Welcomer"
+      timestamp: true
+      fields: []
+  card:
+    enabled: true
+    background: "#23272A"
+    textColor: "#FFFFFF"
+    accentColor: "#6C63FF"
+    layout: modern
+    avatarShape: circle
+    showMemberCount: true
+
+# Ticket setup:
+# 1. In Discord, create a public support channel where the panel should be posted.
+# 2. Create private ticket categories if different buttons should open in different places.
+# 3. Run /ticket setup, open Buttons, edit each button/option, and select its category.
+# 4. Choose panel_channel, fallback ticket_category, support_role, and transcript_channel.
+# 5. Run /ticket panel later to post another panel using the saved server setup.
+# Keep these IDs blank here for multi-guild bots unless you want global defaults.
+ticket:
+  enabled: true
+  category: ""
+  logChannel: ""
+  supportRoles: []
+  transcriptChannel: ""
+  closeOnLeave: false
+  naming: "ticket-{username}"
+  maxOpenPerUser: 1
+  panelStyle: button
+  panel:
+    title: "Support Tickets"
+    description: "Press a button below to open a private support ticket with the server team."
+    color: "#6C63FF"
+    image: ""
+    thumbnail: ""
+  buttons:
+    open: { label: "Open Ticket", emoji: "ticket", style: PRIMARY }
+    close: { label: "Close Ticket", emoji: "lock", style: DANGER }
+    claim: { label: "Claim", emoji: "claim", style: SECONDARY }
+  categories:
+    - { id: support, label: "General Support", emoji: "chat", description: "Get help with general issues", channelId: "" }
+    - { id: report, label: "Report a User", emoji: "alert", description: "Report rule violations", channelId: "" }
+    - { id: appeal, label: "Ban Appeal", emoji: "scale", description: "Appeal a moderation action", channelId: "" }
+
+suggestion:
+  enabled: true
+  channel: ""
+  logChannel: ""
+  approvedRole: ""
+  requireReason: false
+  anonymousVoting: false
+  buttons:
+    upvote: { emoji: up, style: SUCCESS }
+    downvote: { emoji: down, style: DANGER }
+  status: { pending: "#FEE75C", approved: "#57F287", denied: "#ED4245" }
+
+giveaway:
+  enabled: true
+  defaultDuration: 86400
+  maxWinners: 10
+  embedColor: "#F1C40F"
+  endColor: "#57F287"
+  rerollWindow: 86400
+  checkInterval: 60
+  button: { label: "Enter Giveaway", emoji: party, style: PRIMARY }
+
+reaction-role:
+  enabled: true
+  maxPerMessage: 25
+  allowMultiple: true
+  uniqueMode: false
+
+tempvoice:
+  enabled: true
+  createChannel: ""
+  category: ""
+  defaultName: "{username}'s Channel"
+  defaultLimit: 0
+  cleanupInterval: 60
+  allowedBitrate: 96000
+
+verification:
+  enabled: true
+  role: ""
+  channel: ""
+  logChannel: ""
+  type: button
+  captcha: { length: 6, timeout: 120 }
+
+music:
+  enabled: false
+  provider: rainlink
+  defaultVolume: 80
+  maxQueueSize: 500
+  leaveOnEmpty: true
+  leaveOnEmptyDelay: 30
+  leaveOnFinish: false
+  autoplay: false
+  djRole: ""
+  announceChannel: ""
+  searchEngine: youtube
+  ui:
+    updateInterval: 5000
+    suggestionLimit: 5
+    showFilters: true
+    showSuggestions: true
+    artworkStyle: thumbnail
+  lavalink:
+    nodes:
+      - name: primary
+        host: lavalinkv4.serenetia.com
+        port: 443
+        auth: "https://dsc.gg/ajidevserver"
+        secure: true
+        driver: lavalink/v4/koinu
+      - name: backup
+        host: lavalink.jirayu.net
+        port: 13592
+        auth: "youshallnotpass"
+        secure: false
+        driver: lavalink/v4/koinu
+  lyrics: { enabled: true, provider: genius }
+
+adventure:
+  enabled: true
+  energy:
+    max: 100
+    regenPerMinute: 1
+  fight:
+    cooldown: 30
+    baseHealth: 100
+    baseDamage: 12
+    fleePenalty: 10
+  lootRates:
+    common: 0.7
+    rare: 0.25
+    legendary: 0.05
+  dungeon:
+    maxDepth: 10
+    reviveCost: 500
+    bossEvery: 5
+  shop:
+    refreshInterval: 86400
+    maxItems: 12
+
+pet:
+  enabled: true
+  maxPets: 3
+  decayInterval: 3600
+  feedCooldown: 300
+  playCooldown: 600
+  stats:
+    maxHunger: 100
+    maxHappiness: 100
+    decayAmount: 5
+  gachaRates:
+    common: 0.75
+    rare: 0.2
+    legendary: 0.05
+  renameCost: 250
+
+fun:
+  enabled: true
+  trivia:
+    timeout: 30000
+    reward: 50
+  wordle:
+    attempts: 6
+    reward: 100
+  rps:
+    cooldown: 10
+  memeSubreddits:
+    - memes
+    - dankmemes
+  eightballCooldown: 5
+
+ai:
+  enabled: true
+  model: gpt-4o-mini
+  maxTokens: 500
+  systemPrompt: "You are Priyx, a helpful Discord assistant."
+  history:
+    maxMessages: 20
+    ttl: 3600
+  translate:
+    defaultLanguage: en
+    allowedLanguages: [en, hi, es, fr, de, ja]
+
+globalchat:
+  enabled: true
+  channel: ""
+  logChannel: ""
+  filterProfanity: true
+  bannedWords: []
+  webhookUsername: "Priyx Global"
+  maxMessageLength: 1800
+  attachments: true
+
+birthday:
+  enabled: true
+  timezone: UTC
+  checkTime: "09:00"
+  message: "Happy birthday, {user}!"
+  role: ""
+  announceChannel: ""
+  removeRoleAfter: 86400
+
+invite:
+  enabled: true
+  trackFakeInvites: true
+  leaderboardSize: 10
+  fakeInviteThreshold: 300
+  rewardRoles: []
+  ignoredRoles: []
+  cacheTtl: 600
+
+autoreact:
+  enabled: true
+  maxRules: 50
+  defaultChance: 1
+  matchType: contains
+  ignoredChannels: []
+
+autoreply:
+  enabled: true
+  matchType: contains
+  maxRules: 50
+  cooldown: 5
+  mentionAuthor: false
+  ignoredChannels: []
+
+embed-builder:
+  enabled: true
+  maxSavedEmbeds: 25
+  allowV2: true
+  maxJsonLength: 6000
+  defaultMode: embed
+  previewChannel: ""
+  allowedMentions:
+    parse: []
+    roles: []
+    users: []
+    repliedUser: false
+  requireManageMessages: true
+  limits:
+    maxFields: 25
+    maxButtons: 5
+    maxSelectOptions: 25
+    maxImages: 4
+  defaultMessage:
+    type: embed
+    content: ""
+    embed:
+      title: "New Announcement"
+      description: "Write your message here."
+      color: "#6C63FF"
+      authorName: ""
+      authorIcon: ""
+      thumbnail: ""
+      image: ""
+      footer: "Priyx"
+      timestamp: true
+      fields:
+        - { name: "Field title", value: "Field value", inline: false }
+    components:
+      buttons:
+        - { id: "primary", label: "Open", emoji: "", style: PRIMARY, url: "" }
+      selectMenus:
+        - id: "menu"
+          placeholder: "Choose an option"
+          minValues: 1
+          maxValues: 1
+          options:
+            - { label: "Option", value: "option", description: "Select this option", emoji: "" }
+  templates:
+    - id: announcement
+      name: Announcement
+      type: embed
+      content: ""
+      embed:
+        title: "Announcement"
+        description: "Share an update with the server."
+        color: "#6C63FF"
+        footer: "Priyx"
+        timestamp: true
+        fields: []
+    - id: rules
+      name: Rules
+      type: embed
+      content: ""
+      embed:
+        title: "Server Rules"
+        description: "Keep it respectful, safe, and on topic."
+        color: "#57F287"
+        footer: "Priyx"
+        timestamp: false
+        fields:
+          - { name: "1. Be respectful", value: "No harassment, hate speech, or targeted abuse.", inline: false }
+          - { name: "2. Stay on topic", value: "Use the right channels for the right conversations.", inline: false }
+
+image:
+  enabled: true
+  outputFormat: png
+  maxFileSize: 8388608
+  storage:
+    provider: local
+    path: data/images
+  allowedFormats: [png, jpeg, webp]
+  cleanupInterval: 86400
+
+streak:
+  enabled: true
+  activityType: message
+  resetTime: "00:00"
+  graceWindow: 86400
+  minimumMessageLength: 3
+  restore:
+    enabled: true
+    maxPerMonth: 1
+  roleRewards: []
+
+social-alerts:
+  enabled: true
+  checkInterval: 300
+  maxTracked: 25
+  platforms:
+    youtube: true
+    tiktok: true
+    instagram: true
+    rss: true
+  postTemplate: "New post from {source}: {url}"

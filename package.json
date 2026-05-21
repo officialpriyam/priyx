@@ -1,0 +1,63 @@
+{
+	"name": "priyx",
+	"version": "1.0.0",
+	"description": "Priyx, a modular TypeScript Discord bot by Priyx.",
+	"main": "dist/index.js",
+	"author": {
+		"name": "Priyx"
+	},
+	"license": "SEE LICENSE IN LICENSE",
+	"scripts": {
+		"start": "node dist/index.js",
+		"shard": "node dist/sharding.js",
+		"dev": "tsx index.ts",
+		"build": "tsc -p tsconfig.build.json",
+		"typecheck": "tsc --noEmit",
+		"deploy": "tsx src/deploy.ts",
+		"deploy:dry": "tsx src/deploy.ts --dry-run",
+		"deploy:global": "tsx src/deploy.ts --global",
+		"deploy:guild": "tsx src/deploy.ts --guild",
+		"deploy:list:global": "tsx src/deploy.ts --global --remote-list",
+		"deploy:list:guild": "tsx src/deploy.ts --remote-list --guild",
+		"migrate": "tsx src/migrate.ts",
+		"migrate:addon": "tsx src/migrate.ts --addon",
+		"cli": "tsx src/cli.ts",
+		"format": "biome format --write .",
+		"fix": "biome check --write .",
+		"prepare": "husky"
+	},
+	"dependencies": {
+		"commander": "^14.0.2",
+		"discord.js": "^14.25.1",
+		"dotenv": "^17.4.2",
+		"node-cron": "^4.2.1",
+		"pg": "^8.21.0",
+		"rainlink": "^1.2.9",
+		"redis": "^5.12.1",
+		"sequelize": "^6.37.7",
+		"sqlite3": "^5.1.7",
+		"winston": "^3.17.0",
+		"yaml": "^2.9.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.3.6",
+		"@commitlint/cli": "^20.2.0",
+		"@commitlint/config-conventional": "^20.2.0",
+		"@types/node": "^22.0.0",
+		"husky": "^9.1.7",
+		"tsx": "^4.22.3",
+		"typescript": "^5.6.0"
+	},
+	"engines": {
+		"node": ">=22.0.0"
+	},
+	"keywords": [
+		"priyx",
+		"Priyx",
+		"discord bot",
+		"discord.js",
+		"typescript",
+		"priyx-core",
+		"addons"
+	]
+}

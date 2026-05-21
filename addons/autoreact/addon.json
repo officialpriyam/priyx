@@ -1,0 +1,11 @@
+{
+  "name": "autoreact",
+  "description": "Automatic reaction rules.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 70,
+  "dependencies": [
+    "core"
+  ]
+}

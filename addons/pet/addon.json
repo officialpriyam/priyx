@@ -1,0 +1,11 @@
+{
+  "name": "pet",
+  "description": "Pet ownership, care state, and gacha results.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 56,
+  "dependencies": [
+    "core"
+  ]
+}

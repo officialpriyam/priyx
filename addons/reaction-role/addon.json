@@ -1,0 +1,11 @@
+{
+  "name": "reaction-role",
+  "description": "Reaction role panels and role options.",
+  "version": "1.0.0",
+  "author": "Priyx",
+  "enabled": true,
+  "priority": 63,
+  "dependencies": [
+    "core"
+  ]
+}
