@@ -1,9 +1,8 @@
 import type { PriyxClient } from '../../../src/client';
 import type { AiModuleConfig } from '../../../src/types/modules';
 import { AiConversation, type AiStoredMessage } from '../database/models/AiConversation';
-import { completeChat } from './gemini';
+import { completeChat, defaultGeminiModel, normalizeGeminiModel } from './gemini';
 
-const defaultModel = 'gemini-2.5-flash-lite';
 const defaultSystemPrompt = 'You are Priyx, a helpful Discord assistant.';
 const maxKnowledgeChars = 12_000;
 
@@ -111,7 +110,7 @@ export async function runAiChat({
 	const conversation = await getConversation(guildId, userId);
 	const existingMessages = (conversation.messages ?? []) as AiStoredMessage[];
 	const reply = await completeChat({
-		model: config.model ?? defaultModel,
+		model: normalizeGeminiModel(config.model ?? defaultGeminiModel),
 		systemPrompt: systemPrompt(config, includeKnowledge),
 		maxTokens: config.maxTokens ?? 500,
 		messages: existingMessages,
@@ -139,8 +138,14 @@ export function aiSettingsDescription(config: AiModuleConfig): string {
 	const documentCount = (config.knowledgeDocuments ?? []).filter(
 		(document) => document?.enabled !== false && trimBlock(document?.content, 1),
 	).length;
+	const configuredModel = String(config.model ?? '').replace(/^models\//, '');
+	const activeModel = normalizeGeminiModel(config.model ?? defaultGeminiModel);
+	const modelNote =
+		configuredModel && configuredModel !== activeModel
+			? ` fallback from ${configuredModel}`
+			: '';
 	return [
-		`Model: **${config.model ?? 'not configured'}**`,
+		`Model: **${activeModel}**${modelNote}`,
 		`Max tokens: **${config.maxTokens ?? 500}**`,
 		`Support channel: **${config.supportChannel ? `<#${config.supportChannel}>` : 'not configured'}**`,
 		`Knowledge sources: **${documentCount}**`,

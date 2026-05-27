@@ -22,8 +22,22 @@ interface GeminiGenerateResponse {
 	};
 }
 
+export const defaultGeminiModel = 'gemini-2.5-flash-lite';
+
+export function normalizeGeminiModel(model?: string | null): string {
+	const normalized = String(model ?? '')
+		.trim()
+		.replace(/^models\//, '');
+
+	if (!normalized || !normalized.toLowerCase().startsWith('gemini-')) {
+		return defaultGeminiModel;
+	}
+
+	return normalized;
+}
+
 function modelPath(model: string): string {
-	return model.startsWith('models/') ? model : `models/${model}`;
+	return `models/${normalizeGeminiModel(model)}`;
 }
 
 function geminiRole(role: AiStoredMessage['role']): 'user' | 'model' {
