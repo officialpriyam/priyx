@@ -215,10 +215,23 @@ export interface MusicModuleConfig extends EnabledModuleConfig {
 	};
 }
 
+export interface AiKnowledgeDocument {
+	[key: string]: ModuleValue;
+	title?: string;
+	source?: string;
+	enabled?: boolean;
+	content?: string;
+}
+
 export interface AiModuleConfig extends EnabledModuleConfig {
 	model?: string;
 	maxTokens?: number;
 	systemPrompt?: string;
+	supportChannel?: string;
+	knowledgeBase?: string;
+	knowledgeDocuments?: AiKnowledgeDocument[];
+	history?: ModuleValue;
+	translate?: ModuleValue;
 }
 
 export interface BirthdayModuleConfig extends EnabledModuleConfig {

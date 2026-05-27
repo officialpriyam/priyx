@@ -321,6 +321,9 @@ ai:
   model: gpt-4o-mini
   maxTokens: 500
   systemPrompt: "You are Priyx, a helpful Discord assistant."
+  supportChannel: ""
+  knowledgeBase: ""
+  knowledgeDocuments: []
   history:
     maxMessages: 20
     ttl: 3600

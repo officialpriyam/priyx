@@ -2,32 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { PriyxCommand } from '../../../src/structures/Command';
 import { buttonRow, primaryButton, selectRow, stringSelect } from '../../../src/utils/components';
 import { errorEmbed, primaryEmbed, successEmbed } from '../../../src/utils/embed';
-import { AiConversation, type AiStoredMessage } from '../database/models/AiConversation';
-import { completeChat } from '../helpers/openai';
-
-function historyLimit(value: unknown): number {
-	if (typeof value === 'object' && value !== null && 'maxMessages' in value) {
-		return Number(value.maxMessages ?? 20);
-	}
-
-	return 20;
-}
-
-function historyTtl(value: unknown): number {
-	if (typeof value === 'object' && value !== null && 'ttl' in value) {
-		return Number(value.ttl ?? 3600);
-	}
-
-	return 3600;
-}
-
-async function getConversation(guildId: string, userId: string): Promise<AiConversation> {
-	const [conversation] = await AiConversation.findOrCreate({
-		where: { guildId, userId },
-		defaults: { guildId, userId, messages: [] },
-	});
-	return conversation;
-}
+import { aiSettingsDescription, forgetAiHistory, formatAiReply, runAiChat } from '../helpers/chat';
 
 export default new PriyxCommand({
 	data: new SlashCommandBuilder()
@@ -81,10 +56,7 @@ export default new PriyxCommand({
 			: client.module('ai');
 
 		if (subcommand === 'forget') {
-			await AiConversation.destroy({
-				where: { guildId, userId: interaction.user.id },
-			});
-			await client.cache.delete(`ai:history:${guildId}:${interaction.user.id}`);
+			await forgetAiHistory(client, guildId, interaction.user.id);
 			await interaction.reply({
 				embeds: [successEmbed('AI history cleared', 'Your Priyx AI conversation history was deleted.')],
 				flags: MessageFlags.Ephemeral,
@@ -97,11 +69,7 @@ export default new PriyxCommand({
 				embeds: [
 					primaryEmbed(
 						'Priyx AI settings',
-						[
-							`Model: **${config.model ?? 'not configured'}**`,
-							`Max tokens: **${config.maxTokens ?? 500}**`,
-							`System prompt: ${config.systemPrompt ?? 'not configured'}`,
-						].join('\n'),
+						aiSettingsDescription(config),
 					),
 				],
 				components: [
@@ -121,37 +89,22 @@ export default new PriyxCommand({
 		await interaction.deferReply();
 
 		try {
-			const conversation = await getConversation(guildId, interaction.user.id);
-			const existingMessages = (conversation.messages ?? []) as AiStoredMessage[];
 			const prompt =
 				subcommand === 'translate'
 					? `Translate this text to ${interaction.options.getString('language', true)}. Return only the translation.\n\n${interaction.options.getString('text', true)}`
 					: interaction.options.getString('prompt', true);
 
-			const reply = await completeChat({
-				model: config.model ?? 'gpt-4o-mini',
-				systemPrompt: config.systemPrompt ?? 'You are Priyx, a helpful Discord assistant.',
-				maxTokens: config.maxTokens ?? 500,
-				messages: existingMessages,
+			const reply = await runAiChat({
+				client,
+				config,
+				guildId,
+				includeKnowledge: subcommand !== 'translate',
 				prompt,
+				userId: interaction.user.id,
 			});
 
-			const nextMessages: AiStoredMessage[] = [
-				...existingMessages,
-				{ role: 'user' as const, content: prompt, at: Date.now() },
-				{ role: 'assistant' as const, content: reply, at: Date.now() },
-			].slice(-historyLimit(config.history));
-
-			conversation.messages = nextMessages;
-			await conversation.save();
-			await client.cache.set(
-				`ai:history:${guildId}:${interaction.user.id}`,
-				nextMessages,
-				historyTtl(config.history),
-			);
-
 			await interaction.editReply({
-				embeds: [primaryEmbed(subcommand === 'translate' ? 'Translation' : 'Priyx AI', reply)],
+				embeds: [primaryEmbed(subcommand === 'translate' ? 'Translation' : 'Priyx AI', formatAiReply(reply))],
 			});
 		} catch (error) {
 			client.logger.error('[ai] AI request failed:', error);
