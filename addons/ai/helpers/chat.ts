@@ -1,9 +1,9 @@
 import type { PriyxClient } from '../../../src/client';
 import type { AiModuleConfig } from '../../../src/types/modules';
 import { AiConversation, type AiStoredMessage } from '../database/models/AiConversation';
-import { completeChat } from './openai';
+import { completeChat } from './gemini';
 
-const defaultModel = 'gpt-4o-mini';
+const defaultModel = 'gemini-2.5-flash-lite';
 const defaultSystemPrompt = 'You are Priyx, a helpful Discord assistant.';
 const maxKnowledgeChars = 12_000;
 

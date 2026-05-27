@@ -318,7 +318,7 @@ fun:
 
 ai:
   enabled: true
-  model: gpt-4o-mini
+  model: gemini-2.5-flash-lite
   maxTokens: 500
   systemPrompt: "You are Priyx, a helpful Discord assistant."
   supportChannel: ""
