@@ -146,19 +146,70 @@ music:
   provider: rainlink
   defaultVolume: 80
   maxQueueSize: 500
+  twentyFourSeven: false
   leaveOnEmpty: true
   leaveOnEmptyDelay: 30
   leaveOnFinish: false
   autoplay: false
+  autoShuffle: false
+  defaultLoopMode: none
+  djMode: false
   djRole: ""
   announceChannel: ""
+  announceTrackStart: true
+  allowedTextChannels: []
+  allowedVoiceChannels: []
+  voiceChannelStatus: false
+  autoLeaveCleanup: false
   searchEngine: youtube
   ui:
     updateInterval: 5000
     suggestionLimit: 5
     showFilters: true
     showSuggestions: true
+    nowPlayingStyle: extended
+    buttonsInsideContainer: false
     artworkStyle: thumbnail
+  commands:
+    play: true
+    join: true
+    leave: true
+    queue: true
+    nowplaying: true
+    previous: true
+    skip: true
+    pause: true
+    resume: true
+    shuffle: true
+    clear: true
+    remove: true
+    jump: true
+    seek: true
+    loop: true
+    autoplay: true
+    filter: true
+    volume: true
+    stop: true
+  songRequests:
+    enabled: false
+    channel: ""
+    channelName: song-requests
+    idleTitle: Music Player
+    idleDescription: "No music is currently playing. Join a voice channel and send a song name or link to start playing."
+    playingTitle: Now Playing
+    requestPlaceholder: "Type a song name or link in this channel."
+    buttons:
+      previous: true
+      rewind: true
+      pause: true
+      forward: true
+      skip: true
+      volumeDown: true
+      loop: true
+      stop: true
+      shuffle: true
+      volumeUp: true
+      favorite: true
   lavalink:
     nodes:
       - name: primary
@@ -198,6 +249,7 @@ ai:
   enabled: false
   model: gemini-2.5-flash-lite
   maxTokens: 500
+  replyMode: embed
   systemPrompt: "You are Priyx, a helpful Discord assistant."
   supportChannel: ""
   knowledgeBase: ""

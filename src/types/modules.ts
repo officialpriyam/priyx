@@ -189,9 +189,20 @@ export interface MusicModuleConfig extends EnabledModuleConfig {
 	leaveOnEmpty?: boolean;
 	leaveOnEmptyDelay?: number;
 	leaveOnFinish?: boolean;
+	twentyFourSeven?: boolean;
 	autoplay?: boolean;
+	autoShuffle?: boolean;
+	defaultLoopMode?: 'none' | 'track' | 'queue';
+	djMode?: boolean;
 	djRole?: string;
 	announceChannel?: string;
+	announceTrackStart?: boolean;
+	allowedTextChannels?: ModuleValue[];
+	allowedVoiceChannels?: ModuleValue[];
+	voiceChannelStatus?: boolean;
+	autoLeaveCleanup?: boolean;
+	commands?: Record<string, boolean>;
+	songRequests?: ModuleValue;
 	lyrics?: ModuleValue;
 	provider?: 'rainlink';
 	searchEngine?: string;
@@ -200,6 +211,8 @@ export interface MusicModuleConfig extends EnabledModuleConfig {
 		suggestionLimit?: number;
 		showFilters?: boolean;
 		showSuggestions?: boolean;
+		nowPlayingStyle?: 'text' | 'compact' | 'extended';
+		buttonsInsideContainer?: boolean;
 		artworkStyle?: 'thumbnail' | 'banner';
 	};
 	lavalink?: {
@@ -226,6 +239,7 @@ export interface AiKnowledgeDocument {
 export interface AiModuleConfig extends EnabledModuleConfig {
 	model?: string;
 	maxTokens?: number;
+	replyMode?: 'embed' | 'plain';
 	systemPrompt?: string;
 	supportChannel?: string;
 	knowledgeBase?: string;

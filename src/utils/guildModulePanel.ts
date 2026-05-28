@@ -1,14 +1,18 @@
 import {
-	MessageFlags,
-	PermissionFlagsBits,
 	type ActionRowBuilder,
 	type ButtonInteraction,
 	type MessageActionRowComponentBuilder,
+	MessageFlags,
 	type ModalSubmitInteraction,
+	PermissionFlagsBits,
 	type StringSelectMenuInteraction,
 } from 'discord.js';
 import type { PriyxClient } from '../client';
-import { moduleNames, type ModuleName, type ModuleValue } from '../types/modules';
+import {
+	type ModuleName,
+	type ModuleValue,
+	moduleNames,
+} from '../types/modules';
 import {
 	buttonRow,
 	dangerButton,
@@ -34,6 +38,35 @@ function isRecord(value: unknown): value is Record<string, ModuleValue> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
+function formatModuleValue(value: ModuleValue): string {
+	if (value === null || value === undefined || value === '') {
+		return 'not set';
+	}
+
+	if (typeof value === 'boolean') {
+		return value ? 'true' : 'false';
+	}
+
+	if (typeof value === 'number') {
+		return String(value);
+	}
+
+	if (typeof value === 'string') {
+		return truncate(value, 180);
+	}
+
+	if (Array.isArray(value)) {
+		return value.length === 0 ? 'none' : `${value.length} item(s)`;
+	}
+
+	if (isRecord(value)) {
+		const count = Object.keys(value).length;
+		return count === 0 ? 'not set' : `${count} setting(s)`;
+	}
+
+	return 'configured';
+}
+
 export function isModuleName(value: string): value is ModuleName {
 	return (moduleNames as readonly string[]).includes(value);
 }
@@ -41,10 +74,16 @@ export function isModuleName(value: string): value is ModuleName {
 export function moduleConfigLines(
 	config: Record<string, ModuleValue>,
 ): string[] {
-	return Object.entries(config)
-		.filter(([key]) => key !== 'enabled')
+	const entries = Object.entries(config).filter(([key]) => key !== 'enabled');
+	const lines = entries
 		.slice(0, 12)
-		.map(([key, value]) => `**${key}:** ${truncate(JSON.stringify(value), 180)}`);
+		.map(([key, value]) => `**${key}:** ${formatModuleValue(value)}`);
+
+	if (entries.length > lines.length) {
+		lines.push(`**More:** ${entries.length - lines.length} setting(s) hidden`);
+	}
+
+	return lines;
 }
 
 export async function guildModuleDescription(
@@ -63,10 +102,10 @@ export async function guildModuleDescription(
 	].join('\n');
 }
 
-export async function moduleDefaultDescription(
+export function moduleDefaultDescription(
 	client: PriyxClient,
 	moduleName: ModuleName,
-): Promise<string> {
+): string {
 	const config = client.module(moduleName);
 	const lines = isRecord(config) ? moduleConfigLines(config) : [];
 
@@ -132,7 +171,9 @@ export async function replyWithGuildModulePanel(
 ): Promise<void> {
 	if (!interaction.guild) {
 		await interaction.reply({
-			embeds: [errorEmbed('Server only', 'Module settings are stored per server.')],
+			embeds: [
+				errorEmbed('Server only', 'Module settings are stored per server.'),
+			],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -166,7 +207,9 @@ export async function updateGuildModuleEnabled(
 ): Promise<void> {
 	if (!interaction.guild) {
 		await interaction.reply({
-			embeds: [errorEmbed('Server only', 'Module settings are stored per server.')],
+			embeds: [
+				errorEmbed('Server only', 'Module settings are stored per server.'),
+			],
 			flags: MessageFlags.Ephemeral,
 		});
 		return;
@@ -175,7 +218,10 @@ export async function updateGuildModuleEnabled(
 	if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)) {
 		await interaction.reply({
 			embeds: [
-				errorEmbed('Missing permission', 'You need Manage Server to change module settings.'),
+				errorEmbed(
+					'Missing permission',
+					'You need Manage Server to change module settings.',
+				),
 			],
 			flags: MessageFlags.Ephemeral,
 		});
@@ -195,7 +241,9 @@ export async function updateGuildModuleEnabled(
 	});
 }
 
-export function parseModuleConfigJson(raw: string): Record<string, ModuleValue> {
+export function parseModuleConfigJson(
+	raw: string,
+): Record<string, ModuleValue> {
 	const parsed = JSON.parse(raw) as unknown;
 	if (!isRecord(parsed)) {
 		throw new Error('Config JSON must be an object.');

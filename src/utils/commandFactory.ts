@@ -47,6 +47,8 @@ export interface AddonAction {
 	list?: boolean;
 }
 
+const settingsActionNames = new Set(['config', 'settings']);
+
 export function createAddonCommand(
 	moduleName: ModuleName,
 	description: string,
@@ -76,18 +78,24 @@ export function createAddonCommand(
 			}
 
 			const subcommand = interaction.options.getSubcommand(false);
-			const action = actions.find((item) => item.name === subcommand);
 			const title = `${titleCase(moduleName)} ${titleCase(subcommand ?? 'panel')}`;
 
-			if (action?.list || subcommand?.includes('leaderboard')) {
+			if (subcommand && !settingsActionNames.has(subcommand)) {
+				const enabled = await client.isGuildModuleEnabled(
+					interaction.guild.id,
+					moduleName,
+				);
 				await interaction.reply({
 					components: [
-						await guildModulePanelContainer(
-							client,
-							interaction.guild.id,
-							moduleName,
+						buildV2Container({
 							title,
-						),
+							description: [
+								`\`/${moduleName} ${subcommand}\` is registered, but this addon does not provide a runtime handler for that action yet.`,
+								`Module status: **${enabled ? 'enabled' : 'disabled'}**`,
+								'Use `/settings` to configure the module until this command action is implemented.',
+							].join('\n'),
+							footer: `${client.module('bot').name} addon command`,
+						}),
 					],
 					flags: componentsV2Flags,
 				});

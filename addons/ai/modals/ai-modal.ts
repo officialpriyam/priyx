@@ -1,6 +1,6 @@
 import type { PriyxModalHandler } from '../../../src/types/addon';
-import { errorEmbed, primaryEmbed } from '../../../src/utils/embed';
-import { formatAiReply, runAiChat } from '../helpers/chat';
+import { errorEmbed } from '../../../src/utils/embed';
+import { aiReplyPayload, runAiChat } from '../helpers/chat';
 
 const handler: PriyxModalHandler = {
 	customId: 'ai:chat-modal',
@@ -24,7 +24,8 @@ const handler: PriyxModalHandler = {
 			});
 
 			await interaction.editReply({
-				embeds: [primaryEmbed('Priyx AI', formatAiReply(reply))],
+				allowedMentions: { parse: [] },
+				...aiReplyPayload('Priyx AI', reply, config),
 			});
 		} catch (error) {
 			client.logger.error('[ai] Modal request failed:', error);

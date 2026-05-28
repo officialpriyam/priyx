@@ -1,7 +1,7 @@
 import { Events, type Message } from 'discord.js';
 import { PriyxEvent } from '../../../src/structures/Event';
-import { errorEmbed, primaryEmbed } from '../../../src/utils/embed';
-import { formatAiReply, runAiChat } from '../helpers/chat';
+import { errorEmbed } from '../../../src/utils/embed';
+import { aiReplyPayload, runAiChat } from '../helpers/chat';
 
 function canSendTyping(
 	channel: Message['channel'],
@@ -43,8 +43,8 @@ export default new PriyxEvent({
 			});
 
 			await message.reply({
-				allowedMentions: { repliedUser: false },
-				embeds: [primaryEmbed('Priyx AI Support', formatAiReply(reply))],
+				allowedMentions: { parse: [], repliedUser: false },
+				...aiReplyPayload('Priyx AI Support', reply, config),
 			});
 		} catch (error) {
 			client.logger.error('[ai] Support channel request failed:', error);

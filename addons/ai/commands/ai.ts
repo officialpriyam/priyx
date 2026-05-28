@@ -2,7 +2,7 @@ import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { PriyxCommand } from '../../../src/structures/Command';
 import { buttonRow, primaryButton, selectRow, stringSelect } from '../../../src/utils/components';
 import { errorEmbed, primaryEmbed, successEmbed } from '../../../src/utils/embed';
-import { aiSettingsDescription, forgetAiHistory, formatAiReply, runAiChat } from '../helpers/chat';
+import { aiReplyPayload, aiSettingsDescription, forgetAiHistory, runAiChat } from '../helpers/chat';
 
 export default new PriyxCommand({
 	data: new SlashCommandBuilder()
@@ -104,7 +104,8 @@ export default new PriyxCommand({
 			});
 
 			await interaction.editReply({
-				embeds: [primaryEmbed(subcommand === 'translate' ? 'Translation' : 'Priyx AI', formatAiReply(reply))],
+				allowedMentions: { parse: [] },
+				...aiReplyPayload(subcommand === 'translate' ? 'Translation' : 'Priyx AI', reply, config),
 			});
 		} catch (error) {
 			client.logger.error('[ai] AI request failed:', error);

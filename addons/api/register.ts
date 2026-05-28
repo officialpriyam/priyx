@@ -6,15 +6,30 @@ import http, {
 	type Server,
 } from 'node:http';
 import path from 'node:path';
-import { ChannelType, type Guild } from 'discord.js';
+import { ChannelType, type Guild, type GuildTextBasedChannel } from 'discord.js';
+import { RainlinkLoopMode, type RainlinkPlayer, type RainlinkTrack } from 'rainlink';
 import { PriyxAddon } from '../../src/structures/Addon';
 import type { PriyxClient } from '../../src/client';
 import {
 	moduleNames,
 	type ApiModuleConfig,
+	type MusicModuleConfig,
 	type ModuleName,
 	type ModuleValue,
 } from '../../src/types/modules';
+import {
+	createOrGetMusicPlayer,
+	cycleLoop,
+	ensureMusicPlayback,
+	endLivePlayer,
+	formatTrackDuration,
+	getMusicPlayer,
+	getMusicState,
+	isMusicIdAllowed,
+	loopModeFromConfig,
+	setupRainlink,
+	updateLivePlayer,
+} from '../music/helpers';
 
 interface DiscordUser {
 	id: string;
@@ -1008,6 +1023,522 @@ async function patchModule(
 	});
 }
 
+function isRecordValue(value: unknown): value is Record<string, ModuleValue> {
+	return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function requesterId(track?: RainlinkTrack | null): string | null {
+	const requester = track?.requester;
+	return typeof requester === 'object' &&
+		requester !== null &&
+		'id' in requester &&
+		typeof requester.id === 'string'
+		? requester.id
+		: null;
+}
+
+function serializeMusicTrack(track: RainlinkTrack | null | undefined, index?: number) {
+	if (!track) {
+		return null;
+	}
+
+	return {
+		index,
+		identifier: track.identifier ?? null,
+		title: track.title ?? 'Unknown track',
+		author: track.author ?? 'Unknown artist',
+		duration: track.duration ?? 0,
+		durationLabel: track.isStream ? 'Live' : formatTrackDuration(track.duration),
+		isStream: Boolean(track.isStream),
+		uri: track.uri || track.realUri || null,
+		artworkUrl: track.artworkUrl || null,
+		requesterId: requesterId(track),
+	};
+}
+
+interface LrclibLyrics {
+	id?: number;
+	trackName?: string;
+	artistName?: string;
+	albumName?: string;
+	duration?: number;
+	instrumental?: boolean;
+	plainLyrics?: string | null;
+	syncedLyrics?: string | null;
+}
+
+function cleanLyricsTrackName(value: string): string {
+	return value
+		.replace(/\s*\((official\s+)?(music\s+)?video\)\s*/gi, ' ')
+		.replace(/\s*\[(official\s+)?(music\s+)?video\]\s*/gi, ' ')
+		.replace(/\s*\((official\s+)?audio\)\s*/gi, ' ')
+		.replace(/\s*\[(official\s+)?audio\]\s*/gi, ' ')
+		.replace(/\s*\((lyrics?|visualizer|sped up|slowed|nightcore)\)\s*/gi, ' ')
+		.replace(/\s*-\s*(official\s+)?(music\s+)?video\s*$/gi, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function parseLrcTimestamp(value: string): number | null {
+	const match = value.match(/^(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$/);
+	if (!match) {
+		return null;
+	}
+
+	const minutes = Number(match[1]);
+	const seconds = Number(match[2]);
+	const fraction = match[3] ?? '0';
+	const milliseconds = Number(fraction.padEnd(3, '0').slice(0, 3));
+	if (!Number.isFinite(minutes) || !Number.isFinite(seconds)) {
+		return null;
+	}
+
+	return minutes * 60_000 + seconds * 1000 + milliseconds;
+}
+
+function parseSyncedLyrics(value?: string | null) {
+	if (!value) {
+		return [];
+	}
+
+	const lines: Array<{ timeMs: number; text: string }> = [];
+	for (const rawLine of value.split(/\r?\n/)) {
+		const timestamps = [...rawLine.matchAll(/\[([^\]]+)\]/g)];
+		const text = rawLine.replace(/\[[^\]]+\]/g, '').trim();
+		if (!timestamps.length || !text) {
+			continue;
+		}
+
+		for (const timestamp of timestamps) {
+			const timeMs = parseLrcTimestamp(timestamp[1] ?? '');
+			if (timeMs !== null) {
+				lines.push({ timeMs, text });
+			}
+		}
+	}
+
+	return lines.sort((left, right) => left.timeMs - right.timeMs);
+}
+
+function parsePlainLyrics(value?: string | null) {
+	return (value ?? '')
+		.split(/\r?\n/)
+		.map((line) => line.trim())
+		.filter(Boolean)
+		.map((text) => ({ timeMs: null, text }));
+}
+
+async function fetchLrclibLyrics(track: RainlinkTrack): Promise<LrclibLyrics | null> {
+	const trackName = cleanLyricsTrackName(track.title ?? '');
+	const artistName = String(track.author ?? '').trim();
+	if (!trackName || !artistName) {
+		return null;
+	}
+
+	const headers = {
+		Accept: 'application/json',
+		'User-Agent': 'Priyx Dashboard (https://priyx.local)',
+	};
+	const direct = new URL('https://lrclib.net/api/get');
+	direct.searchParams.set('track_name', trackName);
+	direct.searchParams.set('artist_name', artistName);
+	if (!track.isStream && track.duration > 0) {
+		direct.searchParams.set('duration', String(Math.round(track.duration / 1000)));
+	}
+
+	const directResponse = await fetch(direct, { headers }).catch(() => null);
+	if (directResponse?.ok) {
+		return (await directResponse.json()) as LrclibLyrics;
+	}
+
+	const search = new URL('https://lrclib.net/api/search');
+	search.searchParams.set('track_name', trackName);
+	search.searchParams.set('artist_name', artistName);
+	const searchResponse = await fetch(search, { headers }).catch(() => null);
+	if (!searchResponse?.ok) {
+		return null;
+	}
+
+	const results = (await searchResponse.json()) as LrclibLyrics[];
+	return results.find((item) => item.syncedLyrics || item.plainLyrics) ?? null;
+}
+
+function serializeLoopMode(player: RainlinkPlayer): 'none' | 'track' | 'queue' {
+	if (player.loop === RainlinkLoopMode.SONG) {
+		return 'track';
+	}
+
+	if (player.loop === RainlinkLoopMode.QUEUE) {
+		return 'queue';
+	}
+
+	return 'none';
+}
+
+function songRequestsConfig(config: MusicModuleConfig): Record<string, ModuleValue> {
+	return isRecordValue(config.songRequests) ? config.songRequests : {};
+}
+
+function firstMusicTextChannel(
+	guild: Guild,
+	config: MusicModuleConfig,
+): GuildTextBasedChannel | null {
+	const configuredIds = [
+		config.announceChannel,
+		String(songRequestsConfig(config).channel ?? ''),
+	].filter((channelId): channelId is string => Boolean(channelId));
+
+	for (const channelId of configuredIds) {
+		const channel = guild.channels.cache.get(channelId);
+		if (channel?.isTextBased() && !channel.isDMBased()) {
+			return channel;
+		}
+	}
+
+	return (
+		guild.channels.cache.find(
+			(channel): channel is GuildTextBasedChannel =>
+				Boolean(channel?.isTextBased() && !channel.isDMBased()),
+		) ?? null
+	);
+}
+
+function musicPlayerPayload(client: PriyxClient, guildId: string) {
+	const state = getMusicState(guildId);
+	const player = getMusicPlayer(client, guildId);
+	return {
+		connected: Boolean(client.rainlink),
+		active: Boolean(player),
+		autoplay: state.autoplay,
+		filter: state.filter,
+		suggestions: state.suggestions
+			.slice(0, 24)
+			.map((track, index) => serializeMusicTrack(track, index)),
+		player: player
+			? {
+					voiceId: player.voiceId,
+					textId: player.textId,
+					playing: Boolean(player.playing),
+					paused: Boolean(player.paused),
+					volume: player.volume,
+					position: player.position,
+					loop: serializeLoopMode(player),
+					current: serializeMusicTrack(player.queue.current),
+					queue: [...player.queue].map((track, index) =>
+						serializeMusicTrack(track, index + 1),
+					),
+					previous: player.queue.previous
+						.slice(-10)
+						.map((track, index) => serializeMusicTrack(track, index + 1)),
+				}
+			: null,
+	};
+}
+
+async function sendMusicPlayer(
+	req: IncomingMessage,
+	res: ServerResponse,
+	ctx: RequestContext,
+	guildId: string,
+): Promise<void> {
+	const access = await requireGuild(req, res, ctx, guildId);
+	if (!access) {
+		return;
+	}
+
+	setupRainlink(ctx.client);
+	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+}
+
+async function sendMusicSearch(
+	req: IncomingMessage,
+	res: ServerResponse,
+	ctx: RequestContext,
+	guildId: string,
+): Promise<void> {
+	const access = await requireGuild(req, res, ctx, guildId);
+	if (!access) {
+		return;
+	}
+
+	const query = ctx.url.searchParams.get('q')?.trim() ?? '';
+	if (!query) {
+		sendJson(res, 400, { error: 'Search query is required.' });
+		return;
+	}
+
+	setupRainlink(ctx.client);
+	if (!ctx.client.rainlink) {
+		sendJson(res, 409, { error: 'Rainlink is not configured.' });
+		return;
+	}
+
+	const config = await ctx.client.guildModule(guildId, 'music');
+	const result = await ctx.client.rainlink.search(query, {
+		requester: {
+			id: access.session.user.id,
+			username: access.session.user.username,
+		},
+		engine: String(config.searchEngine ?? 'youtube'),
+	});
+	sendJson(res, 200, {
+		type: result.type,
+		playlistName: result.playlistName ?? null,
+		tracks: result.tracks.slice(0, 25).map((track, index) =>
+			serializeMusicTrack(track, index + 1),
+		),
+	});
+}
+
+async function sendMusicLyrics(
+	req: IncomingMessage,
+	res: ServerResponse,
+	ctx: RequestContext,
+	guildId: string,
+): Promise<void> {
+	const access = await requireGuild(req, res, ctx, guildId);
+	if (!access) {
+		return;
+	}
+
+	const config = await ctx.client.guildModule(guildId, 'music');
+	const lyricsConfig = isRecordValue(config.lyrics) ? config.lyrics : {};
+	if (lyricsConfig.enabled === false) {
+		sendJson(res, 200, {
+			status: 'disabled',
+			provider: lyricsConfig.provider ?? 'lrclib',
+			track: null,
+			lines: [],
+			synced: false,
+			message: 'Lyrics are disabled for this server.',
+		});
+		return;
+	}
+
+	const player = getMusicPlayer(ctx.client, guildId);
+	const current = player?.queue.current;
+	if (!player || !current) {
+		sendJson(res, 200, {
+			status: 'no-track',
+			provider: lyricsConfig.provider ?? 'lrclib',
+			track: null,
+			lines: [],
+			synced: false,
+			message: 'No track is playing.',
+		});
+		return;
+	}
+
+	const provider = String(lyricsConfig.provider ?? 'lrclib').toLowerCase();
+	const lyrics = await fetchLrclibLyrics(current).catch(() => null);
+	const syncedLines = parseSyncedLyrics(lyrics?.syncedLyrics);
+	const plainLines = syncedLines.length > 0 ? [] : parsePlainLyrics(lyrics?.plainLyrics);
+	const lines = syncedLines.length > 0 ? syncedLines : plainLines;
+	sendJson(res, 200, {
+		status: lines.length > 0 ? 'found' : 'finding',
+		provider,
+		track: serializeMusicTrack(current),
+		position: player.position,
+		lines,
+		synced: syncedLines.length > 0,
+		message:
+			lines.length > 0
+				? null
+				: 'Finding lyrics...',
+	});
+}
+
+async function patchMusicPlayer(
+	req: IncomingMessage,
+	res: ServerResponse,
+	ctx: RequestContext,
+	guildId: string,
+): Promise<void> {
+	const access = await requireGuild(req, res, ctx, guildId);
+	if (!access) {
+		return;
+	}
+
+	const body = await readJson(req);
+	if (!isConfigRecord(body)) {
+		sendJson(res, 400, { error: 'Request body must be a JSON object.' });
+		return;
+	}
+
+	const action = String(body.action ?? '').trim();
+	const config = await ctx.client.guildModule(guildId, 'music');
+	setupRainlink(ctx.client);
+	if (!ctx.client.rainlink) {
+		sendJson(res, 409, { error: 'Rainlink is not configured.' });
+		return;
+	}
+
+	if (action === 'play' || action === 'add') {
+		const query = String(body.query ?? '').trim();
+		if (!query) {
+			sendJson(res, 400, { error: 'A track query is required.' });
+			return;
+		}
+
+		const member = await access.guild.members
+			.fetch(access.session.user.id)
+			.catch(() => null);
+		if (!member?.voice.channel) {
+			sendJson(res, 409, {
+				error: 'Join a voice channel before starting dashboard playback.',
+			});
+			return;
+		}
+
+		if (!isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)) {
+			sendJson(res, 403, {
+				error: 'Music playback is limited to selected voice channels in this server.',
+			});
+			return;
+		}
+
+		const textChannel = firstMusicTextChannel(access.guild, config);
+		if (!textChannel) {
+			sendJson(res, 409, { error: 'No text channel is available for music updates.' });
+			return;
+		}
+
+		const player = await createOrGetMusicPlayer(
+			ctx.client,
+			access.guild,
+			textChannel.id,
+			member.voice.channel,
+			config,
+		);
+		const result = await ctx.client.rainlink.search(query, {
+			requester: {
+				id: access.session.user.id,
+				username: access.session.user.username,
+			},
+			engine: String(config.searchEngine ?? 'youtube'),
+		});
+		if (result.tracks.length === 0) {
+			sendJson(res, 404, { error: 'No playable tracks were found.' });
+			return;
+		}
+
+		const maxQueueSize = Number(config.maxQueueSize ?? 500);
+		const availableSlots = Math.max(0, maxQueueSize - player.queue.totalSize);
+		if (availableSlots <= 0) {
+			sendJson(res, 409, {
+				error: `This server queue is limited to ${maxQueueSize} tracks.`,
+			});
+			return;
+		}
+
+		const tracks =
+			result.type === 'PLAYLIST'
+				? result.tracks.slice(0, availableSlots)
+				: result.tracks.slice(0, 1);
+		player.queue.add(tracks);
+		if (config.autoShuffle && player.queue.size > 1) {
+			player.queue.shuffle();
+		}
+		await ensureMusicPlayback(player);
+		await updateLivePlayer(ctx.client, player).catch(() => undefined);
+		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+		return;
+	}
+
+	const player = getMusicPlayer(ctx.client, guildId);
+	if (!player) {
+		sendJson(res, 409, { error: 'No active music player exists in this server.' });
+		return;
+	}
+
+	if (action === 'pause') {
+		if (player.paused) {
+			await player.resume();
+		} else {
+			await player.pause();
+		}
+	} else if (action === 'previous') {
+		await player.previous();
+	} else if (action === 'skip') {
+		await player.skip();
+	} else if (action === 'shuffle') {
+		player.queue.shuffle();
+	} else if (action === 'loop') {
+		if (typeof body.mode === 'string') {
+			player.setLoop(loopModeFromConfig(body.mode));
+		} else {
+			cycleLoop(player);
+		}
+	} else if (action === 'autoplay') {
+		const state = getMusicState(guildId);
+		state.autoplay =
+			typeof body.enabled === 'boolean' ? body.enabled : !state.autoplay;
+	} else if (action === 'volume') {
+		const volume = Math.min(150, Math.max(1, Number(body.volume ?? player.volume)));
+		await player.setVolume(volume);
+	} else if (action === 'seek') {
+		const position = Math.max(0, Number(body.position ?? 0));
+		if (player.queue.current && !player.queue.current.isStream) {
+			await player.seek(Math.min(position, player.queue.current.duration));
+		}
+	} else if (action === 'stop') {
+		player.setLoop(RainlinkLoopMode.NONE);
+		player.queue.clear();
+		await endLivePlayer(ctx.client, player, player.queue.current).catch(() => undefined);
+		await player.destroy();
+		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+		return;
+	} else {
+		sendJson(res, 400, { error: 'Unknown music player action.' });
+		return;
+	}
+
+	await updateLivePlayer(ctx.client, player).catch(() => undefined);
+	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+}
+
+async function createSongRequestChannel(
+	req: IncomingMessage,
+	res: ServerResponse,
+	ctx: RequestContext,
+	guildId: string,
+): Promise<void> {
+	const access = await requireGuild(req, res, ctx, guildId);
+	if (!access) {
+		return;
+	}
+
+	const body = await readJson(req).catch(() => ({}));
+	const requestedName = isConfigRecord(body)
+		? String(body.channelName ?? '').trim()
+		: '';
+	const channelName = (requestedName || 'song-requests')
+		.toLowerCase()
+		.replace(/[^a-z0-9-_]/g, '-')
+		.replace(/-+/g, '-')
+		.slice(0, 80);
+	const channel = await access.guild.channels.create({
+		name: channelName || 'song-requests',
+		type: ChannelType.GuildText,
+		reason: 'Priyx music song request channel',
+	});
+	const config = await ctx.client.guildModule(guildId, 'music');
+	const nextSongRequests: Record<string, ModuleValue> = {
+		...songRequestsConfig(config),
+		enabled: true,
+		channel: channel.id,
+		channelName: channel.name,
+	};
+	await ctx.client.updateGuildModuleConfig(guildId, 'music', {
+		songRequests: nextSongRequests,
+	});
+	const updated = await ctx.client.guildModule(guildId, 'music');
+	sendJson(res, 200, {
+		channel: { id: channel.id, name: channel.name },
+		config: updated,
+	});
+}
+
 async function sendAuditLogs(
 	req: IncomingMessage,
 	res: ServerResponse,
@@ -1296,6 +1827,57 @@ async function route(
 		const guildId = parts[2];
 		if (parts.length === 3 && req.method === 'GET') {
 			await sendGuild(req, res, ctx, guildId);
+			return;
+		}
+
+		if (
+			parts[3] === 'music' &&
+			parts[4] === 'player' &&
+			parts.length === 5 &&
+			req.method === 'GET'
+		) {
+			await sendMusicPlayer(req, res, ctx, guildId);
+			return;
+		}
+
+		if (
+			parts[3] === 'music' &&
+			parts[4] === 'player' &&
+			parts.length === 5 &&
+			req.method === 'PATCH'
+		) {
+			await patchMusicPlayer(req, res, ctx, guildId);
+			return;
+		}
+
+		if (
+			parts[3] === 'music' &&
+			parts[4] === 'search' &&
+			parts.length === 5 &&
+			req.method === 'GET'
+		) {
+			await sendMusicSearch(req, res, ctx, guildId);
+			return;
+		}
+
+		if (
+			parts[3] === 'music' &&
+			parts[4] === 'lyrics' &&
+			parts.length === 5 &&
+			req.method === 'GET'
+		) {
+			await sendMusicLyrics(req, res, ctx, guildId);
+			return;
+		}
+
+		if (
+			parts[3] === 'music' &&
+			parts[4] === 'song-requests' &&
+			parts[5] === 'channel' &&
+			parts.length === 6 &&
+			req.method === 'POST'
+		) {
+			await createSongRequestChannel(req, res, ctx, guildId);
 			return;
 		}
 

@@ -1,0 +1,93 @@
+{
+    "paymenter_category_id": null,
+    "features": [
+        {
+            "description": "High-performance storage for rapid loading and backups.",
+            "title": "Ultra Fast NVMe"
+        },
+        {
+            "description": "High-frequency CPUs and optimized network routing.",
+            "title": "Game-Tuned Hardware"
+        },
+        {
+            "description": "Spin up your server in under 60 seconds.",
+            "title": "Instant Deployment"
+        },
+        {
+            "description": "Game-specific filtering keeps your community online.",
+            "title": "DDoS Shield"
+        },
+        {
+            "description": "Full access to configs, files, and console tools.",
+            "title": "Control Panel"
+        },
+        {
+            "description": "Live chat and ticket support from real gamers.",
+            "title": "24/7 Support"
+        }
+    ],
+    "slug": "ark-servers",
+    "hero": {
+        "badge_note": "Ready in 60 seconds",
+        "subhead": "Low-latency COD:BO2 hosting for massive sessions.",
+        "cta_secondary": "View Our Features",
+        "image": "https://media.discordapp.net/attachments/1470014179799859230/1509274110109421640/250px-Call_of_Duty_Black_Ops_II_box_artwork.png?ex=6a18948c&is=6a17430c&hm=58b35cf5a0fceff779439d65a8ac017f563c811946bdb681cebea86aac247f83&=&format=webp&quality=lossless&width=200&height=277",
+        "headline": "COD:BO2 Server Hosting",
+        "cta_primary": "Create Server"
+    },
+    "highlights": [
+        "Always Online",
+        "Instant Setup",
+        "DDoS Protection",
+        "24/7 Support"
+    ],
+    "cta": {
+        "title": "Ready to launch Call of Duty: Black Ops II?",
+        "description": "Instant setup, mod support, and expert assistance.",
+        "button": "Start Your Server"
+    },
+    "name": "Call-of-Duty:-Black-Ops-II",
+    "faqs": [
+        {
+            "question": "How fast is server setup?",
+            "answer": "Most servers deploy in under 60 seconds after checkout."
+        },
+        {
+            "question": "Can I install mods or plugins?",
+            "answer": "Yes, you can install mods, workshop items, or plugins depending on the game."
+        },
+        {
+            "question": "Are backups included?",
+            "answer": "Daily backups are available on all plans."
+        },
+        {
+            "question": "Do you provide DDoS protection?",
+            "answer": "All servers include advanced DDoS filtering tuned for gaming traffic."
+        }
+    ],
+    "plans": [
+        {
+            "currency": "USD",
+            "price": {
+                "yearly": 49.99,
+                "monthly": 2.00,
+                "quarterly": 13.49
+            },
+            "cpu": "2 vCPU",
+            "ram": "2 GB",
+            "storage": "15NVMe",
+            "players": "20-40",
+            "name": "Starter",
+            "features": [
+                "Instant setup",
+                "DDoS protection",
+                "Basic backups"
+            ],
+            "logo": "https://media.discordapp.net/attachments/1470014179799859230/1509274110109421640/250px-Call_of_Duty_Black_Ops_II_box_artwork.png?ex=6a18948c&is=6a17430c&hm=58b35cf5a0fceff779439d65a8ac017f563c811946bdb681cebea86aac247f83&=&format=webp&quality=lossless&width=200&height=277",
+            "order_url": "https://billing.tlsservers.com/products/call-of-duty-black-ops-ii/starter/checkout?plan=73&config[location]=1",
+            "out_of_stock": false
+        }
+    ],
+    "order_url": "order.php?game=beammp",
+    "logo": "/assets/games/call-of-duty-bo2.png"
+}

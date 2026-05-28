@@ -102,6 +102,12 @@ export const musicFilters: {
 const runtimeStates = new Map<string, RuntimeState>();
 let uiTicker: NodeJS.Timeout | null = null;
 
+function moduleRecord(value: unknown): Record<string, unknown> | null {
+	return typeof value === 'object' && value !== null && !Array.isArray(value)
+		? (value as Record<string, unknown>)
+		: null;
+}
+
 function stateFor(guildId: string): RuntimeState {
 	const existing = runtimeStates.get(guildId);
 	if (existing) {
@@ -269,6 +275,19 @@ function loopLabel(loop: RainlinkLoopMode): string {
 	return 'Loop: Off';
 }
 
+export function loopModeFromConfig(value?: unknown): RainlinkLoopMode {
+	const mode = String(value ?? 'none').toLowerCase();
+	if (mode === 'track' || mode === 'song') {
+		return RainlinkLoopMode.SONG;
+	}
+
+	if (mode === 'queue') {
+		return RainlinkLoopMode.QUEUE;
+	}
+
+	return RainlinkLoopMode.NONE;
+}
+
 function filterLabel(value: RuntimeState['filter']): string {
 	return (
 		musicFilters.find((filter) => filter.value === value)?.label ??
@@ -279,7 +298,11 @@ function filterLabel(value: RuntimeState['filter']): string {
 function playerControls(
 	player: RainlinkPlayer,
 	state: RuntimeState,
+	config: MusicModuleConfig,
 ): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+	const songRequests = moduleRecord(config.songRequests);
+	const buttons = moduleRecord(songRequests?.buttons);
+	const enabled = (key: string) => buttons?.[key] !== false;
 	return [
 		toActionRow(
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -287,22 +310,28 @@ function playerControls(
 					'music:player:autoplay',
 					state.autoplay ? 'Autoplay: On' : 'Autoplay: Off',
 				),
-				button(
-					'music:player:previous',
-					'Back',
-					ButtonStyle.Secondary,
-					player.queue.previous.length === 0,
-				),
-				button('music:player:pause', player.paused ? 'Resume' : 'Pause'),
-				button('music:player:skip', 'Skip'),
-				button('music:player:loop', loopLabel(player.loop)),
+				...(enabled('previous')
+					? [
+							button(
+								'music:player:previous',
+								'Back',
+								ButtonStyle.Secondary,
+								player.queue.previous.length === 0,
+							),
+						]
+					: []),
+				...(enabled('pause')
+					? [button('music:player:pause', player.paused ? 'Resume' : 'Pause')]
+					: []),
+				...(enabled('skip') ? [button('music:player:skip', 'Skip')] : []),
+				...(enabled('loop') ? [button('music:player:loop', loopLabel(player.loop))] : []),
 			),
 		),
 		toActionRow(
 			new ActionRowBuilder<ButtonBuilder>().addComponents(
 				button('music:player:queue', 'Queue'),
-				button('music:player:shuffle', 'Shuffle'),
-				button('music:player:stop', 'Stop', ButtonStyle.Danger),
+				...(enabled('shuffle') ? [button('music:player:shuffle', 'Shuffle')] : []),
+				...(enabled('stop') ? [button('music:player:stop', 'Stop', ButtonStyle.Danger)] : []),
 			),
 		),
 	];
@@ -438,6 +467,7 @@ export function buildSimpleMusicContainer(
 function nowPlayingContainer(
 	client: PriyxClient,
 	player: RainlinkPlayer,
+	config: MusicModuleConfig,
 ): ContainerBuilder {
 	const state = stateFor(player.guildId);
 	const current = player.queue.current;
@@ -479,18 +509,20 @@ function nowPlayingContainer(
 			),
 		);
 
-	const suggestion = suggestionRow(state);
+	const suggestion = config.ui?.showSuggestions === false ? null : suggestionRow(state);
 	if (suggestion) {
 		container
 			.addSeparatorComponents(separator())
 			.addActionRowComponents(suggestion);
 	}
 
-	container
-		.addSeparatorComponents(separator())
-		.addActionRowComponents(filterRow());
+	if (config.ui?.showFilters !== false) {
+		container
+			.addSeparatorComponents(separator())
+			.addActionRowComponents(filterRow());
+	}
 
-	for (const row of playerControls(player, state)) {
+	for (const row of playerControls(player, state, config)) {
 		container.addActionRowComponents(row);
 	}
 
@@ -551,8 +583,11 @@ async function writeLivePlayer(
 	}
 
 	state.textId = channel.id;
+	const config = await client
+		.guildModule(player.guildId, 'music')
+		.catch(() => client.module('music'));
 	const payload = {
-		components: [nowPlayingContainer(client, player)],
+		components: [nowPlayingContainer(client, player, config)],
 		flags: MessageFlags.IsComponentsV2 as const,
 	};
 
@@ -676,6 +711,29 @@ export function getMusicState(guildId: string): RuntimeState {
 	return stateFor(guildId);
 }
 
+export function musicIdList(value: unknown): string[] {
+	return Array.isArray(value)
+		? value.map((item) => String(item).trim()).filter(Boolean)
+		: [];
+}
+
+export function isMusicIdAllowed(value: unknown, id?: string | null): boolean {
+	const allowed = musicIdList(value);
+	return allowed.length === 0 || Boolean(id && allowed.includes(id));
+}
+
+export function isMusicCommandEnabled(
+	config: MusicModuleConfig,
+	commandName: string,
+): boolean {
+	const commands = config.commands;
+	if (!commands || typeof commands !== 'object' || Array.isArray(commands)) {
+		return true;
+	}
+
+	return commands[commandName] !== false;
+}
+
 export async function createOrGetMusicPlayer(
 	client: PriyxClient,
 	guild: Guild,
@@ -712,7 +770,7 @@ export async function createOrGetMusicPlayer(
 		volume: Number(config.defaultVolume ?? 80),
 		deaf: true,
 	});
-	player.setLoop(RainlinkLoopMode.NONE);
+	player.setLoop(loopModeFromConfig(config.defaultLoopMode));
 	stateFor(guild.id).autoplay = Boolean(config.autoplay ?? false);
 	return player;
 }
@@ -736,7 +794,7 @@ export async function recreateMusicPlayer(
 		voiceChannel,
 		config,
 	);
-	player.setLoop(RainlinkLoopMode.NONE);
+	player.setLoop(loopModeFromConfig(config.defaultLoopMode));
 	return player;
 }
 
@@ -880,6 +938,10 @@ export async function hasControlPermission(
 		return true;
 	}
 
+	if (config.djMode) {
+		return false;
+	}
+
 	return requesterId(player.queue.current) === interaction.user.id;
 }
 
@@ -896,6 +958,21 @@ export function cycleLoop(player: RainlinkPlayer): RainlinkLoopMode {
 
 	player.setLoop(RainlinkLoopMode.NONE);
 	return RainlinkLoopMode.NONE;
+}
+
+export function removeRequesterTracks(
+	player: RainlinkPlayer,
+	userId: string,
+): number {
+	let removed = 0;
+	for (let index = player.queue.size - 1; index >= 0; index -= 1) {
+		if (requesterId(player.queue[index]) === userId) {
+			player.queue.remove(index);
+			removed += 1;
+		}
+	}
+
+	return removed;
 }
 
 export function parseSeekTime(input: string): number {
@@ -1046,6 +1123,10 @@ function scheduleIdleDestroy(
 	state: RuntimeState,
 ): void {
 	clearIdleTimer(state);
+	if (config.twentyFourSeven) {
+		return;
+	}
+
 	const leaveOnFinish = config.leaveOnFinish ?? false;
 	if (leaveOnFinish) {
 		void player.destroy().catch(() => undefined);
@@ -1158,7 +1239,7 @@ export function setupRainlink(client: PriyxClient): void {
 		state.autoplay = Boolean(config.autoplay ?? false);
 		state.filter = 'clear';
 		state.suggestions = [];
-		player.setLoop(RainlinkLoopMode.NONE);
+		player.setLoop(loopModeFromConfig(config.defaultLoopMode));
 		log.info(
 			`Player created for guild ${player.guildId} in voice ${player.voiceId}.`,
 		);
@@ -1203,9 +1284,11 @@ export function setupRainlink(client: PriyxClient): void {
 			current,
 			Number(guildConfig.ui?.suggestionLimit ?? 5),
 		).catch(() => []);
-		await updateLivePlayer(client, player).catch((error) => {
-			log.warn('Failed to send live player:', error);
-		});
+		if (guildConfig.announceTrackStart !== false) {
+			await updateLivePlayer(client, player).catch((error) => {
+				log.warn('Failed to send live player:', error);
+			});
+		}
 	});
 	rainlink.on('trackEnd', (player, track) => {
 		log.info(
@@ -1274,11 +1357,16 @@ export const MusicHelper = {
 	getMusicPlayer,
 	getMusicState,
 	hasControlPermission,
+	isMusicCommandEnabled,
+	isMusicIdAllowed,
+	loopModeFromConfig,
+	musicIdList,
 	musicNodeStatus,
 	musicPlayerStatus,
 	musicFilters,
 	parseSeekTime,
 	repairMusicPlayer,
+	removeRequesterTracks,
 	replyMusic,
 	requireSameVoice,
 	recreateMusicPlayer,

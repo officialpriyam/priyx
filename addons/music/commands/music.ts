@@ -6,6 +6,7 @@ import {
 import { RainlinkLoopMode, type RainlinkFilterMode } from 'rainlink';
 import type { PriyxClient } from '../../../src/client';
 import { PriyxCommand } from '../../../src/structures/Command';
+import type { MusicModuleConfig } from '../../../src/types/modules';
 import { componentsV2ReplyFlags } from '../../../src/utils/embed';
 import {
 	applyMusicFilter,
@@ -19,6 +20,8 @@ import {
 	getMusicPlayer,
 	getMusicState,
 	hasControlPermission,
+	isMusicCommandEnabled,
+	isMusicIdAllowed,
 	musicNodeStatus,
 	musicPlayerStatus,
 	musicFilters,
@@ -81,6 +84,26 @@ async function requireMemberVoice(
 	}
 
 	return member;
+}
+
+async function requireAllowedVoice(
+	interaction: ChatInputCommandInteraction,
+	client: PriyxClient,
+	member: GuildMember,
+	config: MusicModuleConfig,
+): Promise<boolean> {
+	if (isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)) {
+		return true;
+	}
+
+	await replyMusic(
+		interaction,
+		client,
+		'Voice channel not allowed',
+		'Music playback is limited to selected voice channels in this server.',
+		true,
+	);
+	return false;
 }
 
 async function requirePlayer(
@@ -323,11 +346,35 @@ export default new PriyxCommand({
 		try {
 			const rainlink = await requireRainlink(client);
 			const config = await client.guildModule(guild.id, 'music');
+			if (!isMusicCommandEnabled(config, subcommand)) {
+				await replyMusic(
+					interaction,
+					client,
+					'Command disabled',
+					`The music \`${subcommand}\` command is disabled in this server.`,
+					true,
+				);
+				return;
+			}
+
+			if (!isMusicIdAllowed(config.allowedTextChannels, interaction.channelId)) {
+				await replyMusic(
+					interaction,
+					client,
+					'Text channel not allowed',
+					'Music commands are limited to selected text channels in this server.',
+					true,
+				);
+				return;
+			}
 
 			if (subcommand === 'play') {
 				await interaction.deferReply();
 				const member = await requireMemberVoice(interaction);
 				if (!member?.voice.channel) {
+					return;
+				}
+				if (!(await requireAllowedVoice(interaction, client, member, config))) {
 					return;
 				}
 
@@ -375,6 +422,9 @@ export default new PriyxCommand({
 
 				const tracks = result.tracks.slice(0, Math.max(1, availableSlots));
 				player.queue.add(tracks);
+				if (config.autoShuffle && player.queue.size > 1) {
+					player.queue.shuffle();
+				}
 				await ensureMusicPlayback(player);
 
 				await updateLivePlayer(client, player).catch(() => undefined);
@@ -393,6 +443,9 @@ export default new PriyxCommand({
 			if (subcommand === 'join') {
 				const member = await requireMemberVoice(interaction);
 				if (!member?.voice.channel) {
+					return;
+				}
+				if (!(await requireAllowedVoice(interaction, client, member, config))) {
 					return;
 				}
 
@@ -434,6 +487,9 @@ export default new PriyxCommand({
 				await interaction.deferReply({ ephemeral: true });
 				const member = await requireMemberVoice(interaction);
 				if (!member?.voice.channel) {
+					return;
+				}
+				if (!(await requireAllowedVoice(interaction, client, member, config))) {
 					return;
 				}
 
