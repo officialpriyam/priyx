@@ -297,7 +297,6 @@ music:
       stop: true
       shuffle: true
       volumeUp: true
-      favorite: true
   lavalink:
     nodes:
       - name: primary

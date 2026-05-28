@@ -105,6 +105,20 @@ const handler: PriyxButtonHandler = {
 			return;
 		}
 
+		if (action === 'rewind' || action === 'forward') {
+			const current = player.queue.current;
+			if (current && !current.isStream) {
+				const delta = action === 'rewind' ? -10_000 : 10_000;
+				const position = Math.min(
+					current.duration,
+					Math.max(0, player.position + delta),
+				);
+				await player.seek(position);
+				await updateLivePlayer(client, player).catch(() => undefined);
+			}
+			return;
+		}
+
 		if (action === 'pause') {
 			if (player.paused) {
 				await player.resume();
@@ -132,11 +146,19 @@ const handler: PriyxButtonHandler = {
 			return;
 		}
 
+		if (action === 'volumeDown' || action === 'volumeUp') {
+			const delta = action === 'volumeDown' ? -10 : 10;
+			await player.setVolume(Math.min(150, Math.max(1, player.volume + delta)));
+			await updateLivePlayer(client, player).catch(() => undefined);
+			return;
+		}
+
 		if (action === 'stop') {
+			const current = player.queue.current;
 			player.setLoop(RainlinkLoopMode.NONE);
 			player.queue.clear();
-			await endLivePlayer(client, player, player.queue.current);
-			await player.stop(true);
+			await endLivePlayer(client, player, current);
+			await player.destroy();
 		}
 	},
 };

@@ -6,8 +6,16 @@ import http, {
 	type Server,
 } from 'node:http';
 import path from 'node:path';
-import { ChannelType, type Guild, type GuildTextBasedChannel } from 'discord.js';
-import { RainlinkLoopMode, type RainlinkPlayer, type RainlinkTrack } from 'rainlink';
+import {
+	ChannelType,
+	type Guild,
+	type GuildTextBasedChannel,
+} from 'discord.js';
+import {
+	RainlinkLoopMode,
+	type RainlinkPlayer,
+	type RainlinkTrack,
+} from 'rainlink';
 import { PriyxAddon } from '../../src/structures/Addon';
 import type { PriyxClient } from '../../src/client';
 import {
@@ -22,11 +30,13 @@ import {
 	cycleLoop,
 	ensureMusicPlayback,
 	endLivePlayer,
+	fetchRecommendations,
 	formatTrackDuration,
 	getMusicPlayer,
 	getMusicState,
 	isMusicIdAllowed,
 	loopModeFromConfig,
+	postSongRequestPanel,
 	setupRainlink,
 	updateLivePlayer,
 } from '../music/helpers';
@@ -337,7 +347,9 @@ function withDefaults(config?: ApiModuleConfig): Required<ApiModuleConfig> {
 		corsOrigin: String(config?.corsOrigin ?? dashboardUrl),
 		sessionTtl: Number(config?.sessionTtl ?? 86_400),
 		invitePermissions: String(config?.invitePermissions ?? '8'),
-		oauthRedirectUri: String(config?.oauthRedirectUri ?? dashboardProxyCallback),
+		oauthRedirectUri: String(
+			config?.oauthRedirectUri ?? dashboardProxyCallback,
+		),
 		requireApiKey: Boolean(config?.requireApiKey ?? true),
 	};
 }
@@ -1014,6 +1026,22 @@ async function patchModule(
 	}
 
 	const config = await ctx.client.guildModule(guildId, moduleName);
+	if (moduleName === 'music') {
+		const songRequests = songRequestsConfig(config as MusicModuleConfig);
+		const channelId = String(songRequests.channel ?? '').trim();
+		if (songRequests.enabled !== false && channelId) {
+			await postSongRequestPanel(
+				ctx.client,
+				guildId,
+				channelId,
+				config as MusicModuleConfig,
+			).catch((error) => {
+				ctx.client
+					.addonLogger('api')
+					.warn('Failed to update song request panel:', error);
+			});
+		}
+	}
 	sendJson(res, 200, {
 		module: {
 			name: moduleName,
@@ -1037,7 +1065,10 @@ function requesterId(track?: RainlinkTrack | null): string | null {
 		: null;
 }
 
-function serializeMusicTrack(track: RainlinkTrack | null | undefined, index?: number) {
+function serializeMusicTrack(
+	track: RainlinkTrack | null | undefined,
+	index?: number,
+) {
 	if (!track) {
 		return null;
 	}
@@ -1048,7 +1079,9 @@ function serializeMusicTrack(track: RainlinkTrack | null | undefined, index?: nu
 		title: track.title ?? 'Unknown track',
 		author: track.author ?? 'Unknown artist',
 		duration: track.duration ?? 0,
-		durationLabel: track.isStream ? 'Live' : formatTrackDuration(track.duration),
+		durationLabel: track.isStream
+			? 'Live'
+			: formatTrackDuration(track.duration),
 		isStream: Boolean(track.isStream),
 		uri: track.uri || track.realUri || null,
 		artworkUrl: track.artworkUrl || null,
@@ -1077,6 +1110,48 @@ function cleanLyricsTrackName(value: string): string {
 		.replace(/\s*-\s*(official\s+)?(music\s+)?video\s*$/gi, '')
 		.replace(/\s+/g, ' ')
 		.trim();
+}
+
+function cleanLyricsArtistName(value: string): string {
+	return value
+		.replace(/\s*-\s*topic\s*$/gi, '')
+		.replace(/\s*vevo\s*$/gi, '')
+		.replace(/\s+official\s*$/gi, '')
+		.replace(/\s+/g, ' ')
+		.trim();
+}
+
+function lyricsKey(value?: string | null): string {
+	return cleanLyricsTrackName(String(value ?? ''))
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, ' ')
+		.trim();
+}
+
+function bestLyricsResult(
+	results: LrclibLyrics[],
+	trackName: string,
+	artistName: string,
+	durationSeconds: number | null,
+): LrclibLyrics | null {
+	const wantedTrack = lyricsKey(trackName);
+	const wantedArtist = lyricsKey(artistName);
+	const scored = results
+		.filter((item) => item.syncedLyrics || item.plainLyrics)
+		.map((item) => {
+			const trackScore = lyricsKey(item.trackName) === wantedTrack ? 4 : 0;
+			const artistScore = lyricsKey(item.artistName).includes(wantedArtist)
+				? 2
+				: 0;
+			const durationScore =
+				durationSeconds && item.duration
+					? Math.max(0, 2 - Math.abs(item.duration - durationSeconds) / 8)
+					: 0;
+			return { item, score: trackScore + artistScore + durationScore };
+		})
+		.sort((left, right) => right.score - left.score);
+
+	return scored[0]?.item ?? null;
 }
 
 function parseLrcTimestamp(value: string): number | null {
@@ -1128,12 +1203,18 @@ function parsePlainLyrics(value?: string | null) {
 		.map((text) => ({ timeMs: null, text }));
 }
 
-async function fetchLrclibLyrics(track: RainlinkTrack): Promise<LrclibLyrics | null> {
+async function fetchLrclibLyrics(
+	track: RainlinkTrack,
+): Promise<LrclibLyrics | null> {
 	const trackName = cleanLyricsTrackName(track.title ?? '');
-	const artistName = String(track.author ?? '').trim();
+	const artistName = cleanLyricsArtistName(String(track.author ?? ''));
 	if (!trackName || !artistName) {
 		return null;
 	}
+	const durationSeconds =
+		!track.isStream && track.duration > 0
+			? Math.round(track.duration / 1000)
+			: null;
 
 	const headers = {
 		Accept: 'application/json',
@@ -1142,8 +1223,8 @@ async function fetchLrclibLyrics(track: RainlinkTrack): Promise<LrclibLyrics | n
 	const direct = new URL('https://lrclib.net/api/get');
 	direct.searchParams.set('track_name', trackName);
 	direct.searchParams.set('artist_name', artistName);
-	if (!track.isStream && track.duration > 0) {
-		direct.searchParams.set('duration', String(Math.round(track.duration / 1000)));
+	if (durationSeconds) {
+		direct.searchParams.set('duration', String(durationSeconds));
 	}
 
 	const directResponse = await fetch(direct, { headers }).catch(() => null);
@@ -1155,12 +1236,28 @@ async function fetchLrclibLyrics(track: RainlinkTrack): Promise<LrclibLyrics | n
 	search.searchParams.set('track_name', trackName);
 	search.searchParams.set('artist_name', artistName);
 	const searchResponse = await fetch(search, { headers }).catch(() => null);
-	if (!searchResponse?.ok) {
+	if (searchResponse?.ok) {
+		const results = (await searchResponse.json()) as LrclibLyrics[];
+		const best = bestLyricsResult(
+			results,
+			trackName,
+			artistName,
+			durationSeconds,
+		);
+		if (best) {
+			return best;
+		}
+	}
+
+	const broadSearch = new URL('https://lrclib.net/api/search');
+	broadSearch.searchParams.set('q', `${artistName} ${trackName}`);
+	const broadResponse = await fetch(broadSearch, { headers }).catch(() => null);
+	if (!broadResponse?.ok) {
 		return null;
 	}
 
-	const results = (await searchResponse.json()) as LrclibLyrics[];
-	return results.find((item) => item.syncedLyrics || item.plainLyrics) ?? null;
+	const broadResults = (await broadResponse.json()) as LrclibLyrics[];
+	return bestLyricsResult(broadResults, trackName, artistName, durationSeconds);
 }
 
 function serializeLoopMode(player: RainlinkPlayer): 'none' | 'track' | 'queue' {
@@ -1175,7 +1272,9 @@ function serializeLoopMode(player: RainlinkPlayer): 'none' | 'track' | 'queue' {
 	return 'none';
 }
 
-function songRequestsConfig(config: MusicModuleConfig): Record<string, ModuleValue> {
+function songRequestsConfig(
+	config: MusicModuleConfig,
+): Record<string, ModuleValue> {
 	return isRecordValue(config.songRequests) ? config.songRequests : {};
 }
 
@@ -1196,9 +1295,8 @@ function firstMusicTextChannel(
 	}
 
 	return (
-		guild.channels.cache.find(
-			(channel): channel is GuildTextBasedChannel =>
-				Boolean(channel?.isTextBased() && !channel.isDMBased()),
+		guild.channels.cache.find((channel): channel is GuildTextBasedChannel =>
+			Boolean(channel?.isTextBased() && !channel.isDMBased()),
 		) ?? null
 	);
 }
@@ -1235,6 +1333,39 @@ function musicPlayerPayload(client: PriyxClient, guildId: string) {
 	};
 }
 
+async function ensureMusicRecommendations(
+	client: PriyxClient,
+	guildId: string,
+	config: MusicModuleConfig,
+): Promise<void> {
+	if (config.ui?.showSuggestions === false) {
+		return;
+	}
+
+	const player = getMusicPlayer(client, guildId);
+	const current = player?.queue.current;
+	const state = getMusicState(guildId);
+	if (!player || !current) {
+		return;
+	}
+
+	const currentKey = current.identifier ?? current.uri ?? current.title;
+	const stateKey =
+		state.lastTrack?.identifier ??
+		state.lastTrack?.uri ??
+		state.lastTrack?.title;
+	if (state.suggestions.length > 0 && stateKey === currentKey) {
+		return;
+	}
+
+	state.suggestions = await fetchRecommendations(
+		client,
+		player,
+		current,
+		Number(config.ui?.suggestionLimit ?? 5),
+	).catch(() => []);
+}
+
 async function sendMusicPlayer(
 	req: IncomingMessage,
 	res: ServerResponse,
@@ -1247,6 +1378,8 @@ async function sendMusicPlayer(
 	}
 
 	setupRainlink(ctx.client);
+	const config = await ctx.client.guildModule(guildId, 'music');
+	await ensureMusicRecommendations(ctx.client, guildId, config);
 	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 }
 
@@ -1274,19 +1407,27 @@ async function sendMusicSearch(
 	}
 
 	const config = await ctx.client.guildModule(guildId, 'music');
-	const result = await ctx.client.rainlink.search(query, {
-		requester: {
-			id: access.session.user.id,
-			username: access.session.user.username,
-		},
-		engine: String(config.searchEngine ?? 'youtube'),
-	});
+	const result = await ctx.client.rainlink
+		.search(query, {
+			requester: {
+				id: access.session.user.id,
+				username: access.session.user.username,
+			},
+			engine: String(config.searchEngine ?? 'youtube'),
+		})
+		.catch(() => null);
+	if (!result) {
+		sendJson(res, 502, {
+			error: 'Music search failed. Check the Lavalink node.',
+		});
+		return;
+	}
 	sendJson(res, 200, {
 		type: result.type,
 		playlistName: result.playlistName ?? null,
-		tracks: result.tracks.slice(0, 25).map((track, index) =>
-			serializeMusicTrack(track, index + 1),
-		),
+		tracks: result.tracks
+			.slice(0, 25)
+			.map((track, index) => serializeMusicTrack(track, index + 1)),
 	});
 }
 
@@ -1332,19 +1473,17 @@ async function sendMusicLyrics(
 	const provider = String(lyricsConfig.provider ?? 'lrclib').toLowerCase();
 	const lyrics = await fetchLrclibLyrics(current).catch(() => null);
 	const syncedLines = parseSyncedLyrics(lyrics?.syncedLyrics);
-	const plainLines = syncedLines.length > 0 ? [] : parsePlainLyrics(lyrics?.plainLyrics);
+	const plainLines =
+		syncedLines.length > 0 ? [] : parsePlainLyrics(lyrics?.plainLyrics);
 	const lines = syncedLines.length > 0 ? syncedLines : plainLines;
 	sendJson(res, 200, {
-		status: lines.length > 0 ? 'found' : 'finding',
+		status: lines.length > 0 ? 'found' : 'not-found',
 		provider,
 		track: serializeMusicTrack(current),
 		position: player.position,
 		lines,
 		synced: syncedLines.length > 0,
-		message:
-			lines.length > 0
-				? null
-				: 'Finding lyrics...',
+		message: lines.length > 0 ? null : 'No lyrics were found for this track.',
 	});
 }
 
@@ -1390,16 +1529,21 @@ async function patchMusicPlayer(
 			return;
 		}
 
-		if (!isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)) {
+		if (
+			!isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)
+		) {
 			sendJson(res, 403, {
-				error: 'Music playback is limited to selected voice channels in this server.',
+				error:
+					'Music playback is limited to selected voice channels in this server.',
 			});
 			return;
 		}
 
 		const textChannel = firstMusicTextChannel(access.guild, config);
 		if (!textChannel) {
-			sendJson(res, 409, { error: 'No text channel is available for music updates.' });
+			sendJson(res, 409, {
+				error: 'No text channel is available for music updates.',
+			});
 			return;
 		}
 
@@ -1410,13 +1554,21 @@ async function patchMusicPlayer(
 			member.voice.channel,
 			config,
 		);
-		const result = await ctx.client.rainlink.search(query, {
-			requester: {
-				id: access.session.user.id,
-				username: access.session.user.username,
-			},
-			engine: String(config.searchEngine ?? 'youtube'),
-		});
+		const result = await ctx.client.rainlink
+			.search(query, {
+				requester: {
+					id: access.session.user.id,
+					username: access.session.user.username,
+				},
+				engine: String(config.searchEngine ?? 'youtube'),
+			})
+			.catch(() => null);
+		if (!result) {
+			sendJson(res, 502, {
+				error: 'Music search failed. Check the Lavalink node.',
+			});
+			return;
+		}
 		if (result.tracks.length === 0) {
 			sendJson(res, 404, { error: 'No playable tracks were found.' });
 			return;
@@ -1441,24 +1593,33 @@ async function patchMusicPlayer(
 		}
 		await ensureMusicPlayback(player);
 		await updateLivePlayer(ctx.client, player).catch(() => undefined);
+		await ensureMusicRecommendations(ctx.client, guildId, config);
 		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 		return;
 	}
 
 	const player = getMusicPlayer(ctx.client, guildId);
 	if (!player) {
-		sendJson(res, 409, { error: 'No active music player exists in this server.' });
+		sendJson(res, 409, {
+			error: 'No active music player exists in this server.',
+		});
 		return;
 	}
 
 	if (action === 'pause') {
-		if (player.paused) {
-			await player.resume();
-		} else {
-			await player.pause();
-		}
+		const paused =
+			typeof body.paused === 'boolean' ? body.paused : !player.paused;
+		await player.setPause(paused);
 	} else if (action === 'previous') {
 		await player.previous();
+	} else if (action === 'rewind' || action === 'forward') {
+		const current = player.queue.current;
+		if (current && !current.isStream) {
+			const delta = action === 'rewind' ? -10_000 : 10_000;
+			await player.seek(
+				Math.min(current.duration, Math.max(0, player.position + delta)),
+			);
+		}
 	} else if (action === 'skip') {
 		await player.skip();
 	} else if (action === 'shuffle') {
@@ -1474,17 +1635,24 @@ async function patchMusicPlayer(
 		state.autoplay =
 			typeof body.enabled === 'boolean' ? body.enabled : !state.autoplay;
 	} else if (action === 'volume') {
-		const volume = Math.min(150, Math.max(1, Number(body.volume ?? player.volume)));
+		const volume = Math.min(
+			150,
+			Math.max(1, Number(body.volume ?? player.volume)),
+		);
 		await player.setVolume(volume);
+	} else if (action === 'volumeDown' || action === 'volumeUp') {
+		const delta = action === 'volumeDown' ? -10 : 10;
+		await player.setVolume(Math.min(150, Math.max(1, player.volume + delta)));
 	} else if (action === 'seek') {
 		const position = Math.max(0, Number(body.position ?? 0));
 		if (player.queue.current && !player.queue.current.isStream) {
 			await player.seek(Math.min(position, player.queue.current.duration));
 		}
 	} else if (action === 'stop') {
+		const current = player.queue.current;
 		player.setLoop(RainlinkLoopMode.NONE);
 		player.queue.clear();
-		await endLivePlayer(ctx.client, player, player.queue.current).catch(() => undefined);
+		await endLivePlayer(ctx.client, player, current).catch(() => undefined);
 		await player.destroy();
 		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 		return;
@@ -1494,6 +1662,7 @@ async function patchMusicPlayer(
 	}
 
 	await updateLivePlayer(ctx.client, player).catch(() => undefined);
+	void ensureMusicRecommendations(ctx.client, guildId, config);
 	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 }
 
@@ -1533,9 +1702,19 @@ async function createSongRequestChannel(
 		songRequests: nextSongRequests,
 	});
 	const updated = await ctx.client.guildModule(guildId, 'music');
+	let panelPosted = false;
+	try {
+		await postSongRequestPanel(ctx.client, guildId, channel.id, updated, true);
+		panelPosted = true;
+	} catch (error) {
+		ctx.client
+			.addonLogger('api')
+			.warn('Failed to post song request panel:', error);
+	}
 	sendJson(res, 200, {
 		channel: { id: channel.id, name: channel.name },
 		config: updated,
+		panelPosted,
 	});
 }
 

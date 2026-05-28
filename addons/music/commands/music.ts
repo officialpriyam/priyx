@@ -357,7 +357,9 @@ export default new PriyxCommand({
 				return;
 			}
 
-			if (!isMusicIdAllowed(config.allowedTextChannels, interaction.channelId)) {
+			if (
+				!isMusicIdAllowed(config.allowedTextChannels, interaction.channelId)
+			) {
 				await replyMusic(
 					interaction,
 					client,
@@ -771,9 +773,10 @@ export default new PriyxCommand({
 			}
 
 			if (subcommand === 'stop') {
+				const current = player.queue.current;
 				player.setLoop(RainlinkLoopMode.NONE);
 				player.queue.clear();
-				await endLivePlayer(client, player, player.queue.current);
+				await endLivePlayer(client, player, current);
 				await player.stop(true);
 				await replyMusic(
 					interaction,

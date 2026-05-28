@@ -297,44 +297,104 @@ function filterLabel(value: RuntimeState['filter']): string {
 
 function playerControls(
 	player: RainlinkPlayer,
-	state: RuntimeState,
+	_state: RuntimeState,
 	config: MusicModuleConfig,
+): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
+	return musicControlRows(config, player);
+}
+
+function musicControlRows(
+	config: MusicModuleConfig,
+	player?: RainlinkPlayer,
 ): ActionRowBuilder<MessageActionRowComponentBuilder>[] {
 	const songRequests = moduleRecord(config.songRequests);
 	const buttons = moduleRecord(songRequests?.buttons);
 	const enabled = (key: string) => buttons?.[key] !== false;
-	return [
-		toActionRow(
-			new ActionRowBuilder<ButtonBuilder>().addComponents(
-				button(
-					'music:player:autoplay',
-					state.autoplay ? 'Autoplay: On' : 'Autoplay: Off',
+	const disabled = !player;
+	const current = player?.queue.current ?? null;
+	const seekDisabled = disabled || !current || current.isStream;
+	const definitions = [
+		{
+			key: 'previous',
+			customId: 'music:player:previous',
+			label: 'Previous',
+			disabled: disabled || (player?.queue.previous.length ?? 0) === 0,
+		},
+		{
+			key: 'rewind',
+			customId: 'music:player:rewind',
+			label: 'Rewind',
+			disabled: seekDisabled,
+		},
+		{
+			key: 'pause',
+			customId: 'music:player:pause',
+			label: player?.paused ? 'Resume' : 'Pause',
+			disabled,
+		},
+		{
+			key: 'forward',
+			customId: 'music:player:forward',
+			label: 'Forward',
+			disabled: seekDisabled,
+		},
+		{
+			key: 'skip',
+			customId: 'music:player:skip',
+			label: 'Skip',
+			disabled,
+		},
+		{
+			key: 'volumeDown',
+			customId: 'music:player:volumeDown',
+			label: 'Volume-',
+			disabled,
+		},
+		{
+			key: 'loop',
+			customId: 'music:player:loop',
+			label: player ? loopLabel(player.loop) : 'Loop: Off',
+			disabled,
+		},
+		{
+			key: 'stop',
+			customId: 'music:player:stop',
+			label: 'Stop',
+			style: ButtonStyle.Danger,
+			disabled,
+		},
+		{
+			key: 'shuffle',
+			customId: 'music:player:shuffle',
+			label: 'Shuffle',
+			disabled,
+		},
+		{
+			key: 'volumeUp',
+			customId: 'music:player:volumeUp',
+			label: 'Volume+',
+			disabled,
+		},
+	].filter((item) => enabled(item.key));
+
+	const rows: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
+	for (let index = 0; index < definitions.length; index += 5) {
+		const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+			definitions
+				.slice(index, index + 5)
+				.map((item) =>
+					button(
+						item.customId,
+						item.label,
+						item.style ?? ButtonStyle.Secondary,
+						item.disabled,
+					),
 				),
-				...(enabled('previous')
-					? [
-							button(
-								'music:player:previous',
-								'Back',
-								ButtonStyle.Secondary,
-								player.queue.previous.length === 0,
-							),
-						]
-					: []),
-				...(enabled('pause')
-					? [button('music:player:pause', player.paused ? 'Resume' : 'Pause')]
-					: []),
-				...(enabled('skip') ? [button('music:player:skip', 'Skip')] : []),
-				...(enabled('loop') ? [button('music:player:loop', loopLabel(player.loop))] : []),
-			),
-		),
-		toActionRow(
-			new ActionRowBuilder<ButtonBuilder>().addComponents(
-				button('music:player:queue', 'Queue'),
-				...(enabled('shuffle') ? [button('music:player:shuffle', 'Shuffle')] : []),
-				...(enabled('stop') ? [button('music:player:stop', 'Stop', ButtonStyle.Danger)] : []),
-			),
-		),
-	];
+		);
+		rows.push(toActionRow(row));
+	}
+
+	return rows;
 }
 
 function filterRow(): ActionRowBuilder<MessageActionRowComponentBuilder> {
@@ -464,6 +524,49 @@ export function buildSimpleMusicContainer(
 		);
 }
 
+function songRequestText(
+	config: MusicModuleConfig,
+	key: string,
+	fallback: string,
+): string {
+	const songRequests = moduleRecord(config.songRequests);
+	const value = songRequests?.[key];
+	return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+export function buildSongRequestIdleContainer(
+	client: PriyxClient,
+	config: MusicModuleConfig,
+): ContainerBuilder {
+	const title = songRequestText(config, 'idleTitle', 'Music Player');
+	const description = songRequestText(
+		config,
+		'idleDescription',
+		'No music is currently playing. Join a voice channel and send a song name or link to start playing.',
+	);
+	const placeholder = songRequestText(
+		config,
+		'requestPlaceholder',
+		'Type a song name or link in this channel.',
+	);
+	const container = new ContainerBuilder()
+		.setAccentColor(musicAccent(client))
+		.addTextDisplayComponents(textDisplay(`## ${title}`))
+		.addSeparatorComponents(separator())
+		.addTextDisplayComponents(textDisplay(description))
+		.addTextDisplayComponents(textDisplay(`> ${placeholder}`));
+
+	for (const row of musicControlRows(config)) {
+		container.addActionRowComponents(row);
+	}
+
+	return container
+		.addSeparatorComponents(separator())
+		.addTextDisplayComponents(
+			textDisplay(`${client.module('bot').name} song requests`),
+		);
+}
+
 function nowPlayingContainer(
 	client: PriyxClient,
 	player: RainlinkPlayer,
@@ -473,9 +576,11 @@ function nowPlayingContainer(
 	const current = player.queue.current;
 	const container = new ContainerBuilder().setAccentColor(musicAccent(client));
 	const art = artworkUrl(current);
+	const titleLabel = songRequestText(config, 'playingTitle', 'Now Playing');
+	const idleTitle = songRequestText(config, 'idleTitle', 'Music Player');
 	const title = current
-		? `## Now Playing\n${trackLink(current)}`
-		: '## Music Player\nIdle';
+		? `## ${titleLabel}\n${trackLink(current)}`
+		: `## ${idleTitle}\nIdle`;
 
 	if (art) {
 		container.addSectionComponents(
@@ -509,7 +614,8 @@ function nowPlayingContainer(
 			),
 		);
 
-	const suggestion = config.ui?.showSuggestions === false ? null : suggestionRow(state);
+	const suggestion =
+		config.ui?.showSuggestions === false ? null : suggestionRow(state);
 	if (suggestion) {
 		container
 			.addSeparatorComponents(separator())
@@ -605,6 +711,41 @@ async function writeLivePlayer(
 	state.messageId = message.id;
 }
 
+export async function postSongRequestPanel(
+	client: PriyxClient,
+	guildId: string,
+	channelId: string,
+	config: MusicModuleConfig,
+	forceSend = false,
+): Promise<void> {
+	const state = stateFor(guildId);
+	const channel =
+		client.channels.cache.get(channelId) ??
+		(await client.channels.fetch(channelId).catch(() => null));
+	if (!isMusicTextChannel(channel)) {
+		return;
+	}
+
+	state.textId = channel.id;
+	const payload = {
+		components: [buildSongRequestIdleContainer(client, config)],
+		flags: MessageFlags.IsComponentsV2 as const,
+	};
+
+	if (!forceSend && state.messageId) {
+		const existing = await channel.messages
+			.fetch(state.messageId)
+			.catch(() => null);
+		if (existing) {
+			await existing.edit(payload);
+			return;
+		}
+	}
+
+	const message = await channel.send(payload);
+	state.messageId = message.id;
+}
+
 export async function updateLivePlayer(
 	client: PriyxClient,
 	player: RainlinkPlayer,
@@ -642,8 +783,18 @@ export async function endLivePlayer(
 		return;
 	}
 
+	const config = await client
+		.guildModule(player.guildId, 'music')
+		.catch(() => client.module('music'));
+	const songRequests = moduleRecord(config.songRequests);
+	const useIdlePanel =
+		songRequests?.enabled !== false && songRequests?.channel === channelId;
 	const payload = {
-		components: [endedContainer(client, track ?? state.lastTrack)],
+		components: [
+			useIdlePanel
+				? buildSongRequestIdleContainer(client, config)
+				: endedContainer(client, track ?? state.lastTrack),
+		],
 		flags: MessageFlags.IsComponentsV2 as const,
 	};
 
@@ -1013,25 +1164,42 @@ export async function fetchRecommendations(
 	track: RainlinkTrack,
 	limit = 5,
 ): Promise<RainlinkTrack[]> {
-	if (!client.rainlink || !track.identifier) {
+	if (!client.rainlink) {
 		return [];
 	}
-
-	const searchUrl = `https://www.youtube.com/watch?v=${track.identifier}&list=RD${track.identifier}`;
-	const result = await client.rainlink.search(searchUrl, {
-		requester: track.requester,
-		engine: 'youtube',
-	});
 
 	const seen = new Set([
 		track.identifier,
 		...player.queue.previous.map((item) => item.identifier),
 	]);
-	return result.tracks
-		.filter(
-			(candidate) => candidate.identifier && !seen.has(candidate.identifier),
-		)
-		.slice(0, limit);
+	const recommendations: RainlinkTrack[] = [];
+	const queries = [
+		track.identifier
+			? `https://www.youtube.com/watch?v=${track.identifier}&list=RD${track.identifier}`
+			: '',
+		`${track.author ?? ''} ${track.title ?? ''}`.trim(),
+	].filter(Boolean);
+
+	for (const query of queries) {
+		const result = await client.rainlink
+			.search(query, {
+				requester: track.requester,
+				engine: 'youtube',
+			})
+			.catch(() => null);
+		for (const candidate of result?.tracks ?? []) {
+			if (!candidate.identifier || seen.has(candidate.identifier)) {
+				continue;
+			}
+			seen.add(candidate.identifier);
+			recommendations.push(candidate);
+			if (recommendations.length >= limit) {
+				return recommendations;
+			}
+		}
+	}
+
+	return recommendations;
 }
 
 export async function addSuggestionToQueue(
@@ -1342,6 +1510,7 @@ export const MusicHelper = {
 	addSuggestionToQueue,
 	applyMusicFilter,
 	buildQueueContainer,
+	buildSongRequestIdleContainer,
 	buildSimpleMusicContainer,
 	cacheKey(...parts: string[]): string {
 		return ['music', ...parts].join(':');
@@ -1351,6 +1520,7 @@ export const MusicHelper = {
 	cycleLoop,
 	ensureMusicPlayback,
 	endLivePlayer,
+	fetchRecommendations,
 	fetchGuildMember,
 	formatTrack,
 	formatTrackDuration,
@@ -1365,6 +1535,7 @@ export const MusicHelper = {
 	musicPlayerStatus,
 	musicFilters,
 	parseSeekTime,
+	postSongRequestPanel,
 	repairMusicPlayer,
 	removeRequesterTracks,
 	replyMusic,
