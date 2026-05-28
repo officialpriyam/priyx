@@ -29,6 +29,7 @@ import {
 	repairMusicPlayer,
 	replyMusic,
 	requireSameVoice,
+	searchMusicTracks,
 	setupRainlink,
 	updateLivePlayer,
 } from '../helpers';
@@ -344,7 +345,7 @@ export default new PriyxCommand({
 		const subcommand = interaction.options.getSubcommand(true);
 
 		try {
-			const rainlink = await requireRainlink(client);
+			await requireRainlink(client);
 			const config = await client.guildModule(guild.id, 'music');
 			if (!isMusicCommandEnabled(config, subcommand)) {
 				await replyMusic(
@@ -387,12 +388,11 @@ export default new PriyxCommand({
 					member.voice.channel,
 					config,
 				);
-				const result = await rainlink.search(
+				const result = await searchMusicTracks(
+					client,
 					interaction.options.getString('query', true),
-					{
-						requester: interaction.user,
-						engine: String(config.searchEngine ?? 'youtube'),
-					},
+					config,
+					interaction.user,
 				);
 
 				if (result.tracks.length === 0) {

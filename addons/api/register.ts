@@ -37,6 +37,7 @@ import {
 	isMusicIdAllowed,
 	loopModeFromConfig,
 	postSongRequestPanel,
+	searchMusicTracks,
 	setupRainlink,
 	updateLivePlayer,
 } from '../music/helpers';
@@ -1407,15 +1408,16 @@ async function sendMusicSearch(
 	}
 
 	const config = await ctx.client.guildModule(guildId, 'music');
-	const result = await ctx.client.rainlink
-		.search(query, {
-			requester: {
-				id: access.session.user.id,
-				username: access.session.user.username,
-			},
-			engine: String(config.searchEngine ?? 'youtube'),
-		})
-		.catch(() => null);
+	const requester = {
+		id: access.session.user.id,
+		username: access.session.user.username,
+	};
+	const result = await searchMusicTracks(
+		ctx.client,
+		query,
+		config,
+		requester,
+	).catch(() => null);
 	if (!result) {
 		sendJson(res, 502, {
 			error: 'Music search failed. Check the Lavalink node.',
@@ -1470,7 +1472,7 @@ async function sendMusicLyrics(
 		return;
 	}
 
-	const provider = String(lyricsConfig.provider ?? 'lrclib').toLowerCase();
+	const provider = 'lrclib';
 	const lyrics = await fetchLrclibLyrics(current).catch(() => null);
 	const syncedLines = parseSyncedLyrics(lyrics?.syncedLyrics);
 	const plainLines =
@@ -1554,15 +1556,16 @@ async function patchMusicPlayer(
 			member.voice.channel,
 			config,
 		);
-		const result = await ctx.client.rainlink
-			.search(query, {
-				requester: {
-					id: access.session.user.id,
-					username: access.session.user.username,
-				},
-				engine: String(config.searchEngine ?? 'youtube'),
-			})
-			.catch(() => null);
+		const requester = {
+			id: access.session.user.id,
+			username: access.session.user.username,
+		};
+		const result = await searchMusicTracks(
+			ctx.client,
+			query,
+			config,
+			requester,
+		).catch(() => null);
 		if (!result) {
 			sendJson(res, 502, {
 				error: 'Music search failed. Check the Lavalink node.',

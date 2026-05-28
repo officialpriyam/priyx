@@ -5,6 +5,7 @@ import {
 	ensureMusicPlayback,
 	formatTrack,
 	isMusicIdAllowed,
+	searchMusicTracks,
 	setupRainlink,
 	updateLivePlayer,
 } from '../helpers';
@@ -22,7 +23,9 @@ export default new PriyxEvent({
 		}
 
 		const config = await client.guildModule(message.guild.id, 'music');
-		const songRequests = isRecord(config.songRequests) ? config.songRequests : {};
+		const songRequests = isRecord(config.songRequests)
+			? config.songRequests
+			: {};
 		const channelId = String(songRequests.channel ?? '').trim();
 		const prompt = message.content.trim();
 		if (
@@ -35,7 +38,9 @@ export default new PriyxEvent({
 			return;
 		}
 
-		const member = await message.guild.members.fetch(message.author.id).catch(() => null);
+		const member = await message.guild.members
+			.fetch(message.author.id)
+			.catch(() => null);
 		if (!member?.voice.channel) {
 			await message
 				.reply({
@@ -46,10 +51,13 @@ export default new PriyxEvent({
 			return;
 		}
 
-		if (!isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)) {
+		if (
+			!isMusicIdAllowed(config.allowedVoiceChannels, member.voice.channelId)
+		) {
 			await message
 				.reply({
-					content: 'Music playback is limited to selected voice channels in this server.',
+					content:
+						'Music playback is limited to selected voice channels in this server.',
 					allowedMentions: { repliedUser: false },
 				})
 				.catch(() => undefined);
@@ -60,7 +68,8 @@ export default new PriyxEvent({
 		if (!client.rainlink) {
 			await message
 				.reply({
-					content: 'Music is not available because no Lavalink node is configured.',
+					content:
+						'Music is not available because no Lavalink node is configured.',
 					allowedMentions: { repliedUser: false },
 				})
 				.catch(() => undefined);
@@ -75,10 +84,12 @@ export default new PriyxEvent({
 				member.voice.channel,
 				config,
 			);
-			const result = await client.rainlink.search(prompt, {
-				requester: message.author,
-				engine: String(config.searchEngine ?? 'youtube'),
-			});
+			const result = await searchMusicTracks(
+				client,
+				prompt,
+				config,
+				message.author,
+			);
 			const track = result.tracks[0];
 			if (!track) {
 				await message
@@ -117,7 +128,8 @@ export default new PriyxEvent({
 			client.addonLogger('music').error('Song request failed:', error);
 			await message
 				.reply({
-					content: error instanceof Error ? error.message : 'Music request failed.',
+					content:
+						error instanceof Error ? error.message : 'Music request failed.',
 					allowedMentions: { repliedUser: false },
 				})
 				.catch(() => undefined);

@@ -13,7 +13,7 @@ bot:
     sync: false
     logging: false
   redis:
-    enabled: true
+    enabled: false
     host: localhost
     port: 6379
     db: 0
@@ -52,12 +52,12 @@ core:
 
 api:
   enabled: true
-  host: "127.0.0.1"
-  port: 8787
-  publicUrl: "http://localhost:8787"
-  dashboardUrl: "http://localhost:5173"
-  corsOrigin: "http://localhost:5173"
-  oauthRedirectUri: "http://localhost:5173/api/priyx/auth/callback"
+  host: "0.0.0.0"
+  port: 9348
+  publicUrl: "http://151.242.127.2:9348"
+  dashboardUrl: "https://priyx-dasboard.vercel.app/"
+  corsOrigin: "https://priyx-dasboard.vercel.app/"
+  oauthRedirectUri: "https://priyx-dasboard.vercel.app/api/priyx/auth/callback"
   sessionTtl: 86400
   invitePermissions: "8"
   requireApiKey: true
@@ -234,50 +234,19 @@ music:
   provider: rainlink
   defaultVolume: 80
   maxQueueSize: 500
-  twentyFourSeven: false
   leaveOnEmpty: true
   leaveOnEmptyDelay: 30
   leaveOnFinish: false
   autoplay: false
-  autoShuffle: false
-  defaultLoopMode: none
-  djMode: false
   djRole: ""
   announceChannel: ""
-  announceTrackStart: true
-  allowedTextChannels: []
-  allowedVoiceChannels: []
-  voiceChannelStatus: false
-  autoLeaveCleanup: false
   searchEngine: youtube
   ui:
     updateInterval: 5000
     suggestionLimit: 5
     showFilters: true
     showSuggestions: true
-    nowPlayingStyle: extended
-    buttonsInsideContainer: false
     artworkStyle: thumbnail
-  commands:
-    play: true
-    join: true
-    leave: true
-    queue: true
-    nowplaying: true
-    previous: true
-    skip: true
-    pause: true
-    resume: true
-    shuffle: true
-    clear: true
-    remove: true
-    jump: true
-    seek: true
-    loop: true
-    autoplay: true
-    filter: true
-    volume: true
-    stop: true
   songRequests:
     enabled: false
     channel: ""
@@ -300,9 +269,9 @@ music:
   lavalink:
     nodes:
       - name: primary
-        host: lavalinkv4.serenetia.com
+        host: lavalink-v4.triniumhost.com
         port: 443
-        auth: "https://dsc.gg/ajidevserver"
+        auth: "free"
         secure: true
         driver: lavalink/v4/koinu
       - name: backup
@@ -370,11 +339,7 @@ ai:
   enabled: true
   model: gemini-2.5-flash-lite
   maxTokens: 500
-  replyMode: embed
   systemPrompt: "You are Priyx, a helpful Discord assistant."
-  supportChannel: ""
-  knowledgeBase: ""
-  knowledgeDocuments: []
   history:
     maxMessages: 20
     ttl: 3600

@@ -28,6 +28,7 @@ import {
 	type RainlinkFilterMode,
 	type RainlinkNodeOptions,
 	type RainlinkPlayer,
+	type RainlinkSearchResult,
 	type RainlinkTrack,
 } from 'rainlink';
 import type { PriyxClient } from '../../../src/client';
@@ -885,6 +886,70 @@ export function isMusicCommandEnabled(
 	return commands[commandName] !== false;
 }
 
+export function normalizeMusicSearchEngine(value?: unknown): string {
+	const engine = String(value ?? 'youtube')
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, '_');
+
+	if (
+		engine === 'youtube_music' ||
+		engine === 'youtubemusic' ||
+		engine === 'ytm'
+	) {
+		return 'youtubeMusic';
+	}
+
+	if (engine === 'soundcloud' || engine === 'sound_cloud' || engine === 'sc') {
+		return 'soundcloud';
+	}
+
+	return 'youtube';
+}
+
+function musicSearchEngines(value?: unknown): string[] {
+	const preferred = normalizeMusicSearchEngine(value);
+	return [preferred, 'youtube', 'youtubeMusic', 'soundcloud'].filter(
+		(engine, index, engines) => engines.indexOf(engine) === index,
+	);
+}
+
+export async function searchMusicTracks(
+	client: PriyxClient,
+	query: string,
+	config: MusicModuleConfig,
+	requester: unknown,
+): Promise<RainlinkSearchResult> {
+	if (!client.rainlink) {
+		throw new Error('Rainlink is not configured.');
+	}
+
+	let lastResult: RainlinkSearchResult | null = null;
+	let lastError: unknown = null;
+	for (const engine of musicSearchEngines(config.searchEngine)) {
+		const result = await client.rainlink
+			.search(query, { requester, engine })
+			.catch((error) => {
+				lastError = error;
+				return null;
+			});
+		if (result?.tracks.length) {
+			return result;
+		}
+		if (result) {
+			lastResult = result;
+		}
+	}
+
+	if (lastResult) {
+		return lastResult;
+	}
+
+	throw lastError instanceof Error
+		? lastError
+		: new Error('Music search failed. Check the Lavalink node.');
+}
+
 export async function createOrGetMusicPlayer(
 	client: PriyxClient,
 	guild: Guild,
@@ -1381,7 +1446,7 @@ export function setupRainlink(client: PriyxClient): void {
 		library: new Library.DiscordJS(client),
 		nodes,
 		options: {
-			defaultSearchEngine: config.searchEngine ?? 'youtube',
+			defaultSearchEngine: normalizeMusicSearchEngine(config.searchEngine),
 			defaultVolume: config.defaultVolume ?? 80,
 		},
 	});
@@ -1534,6 +1599,7 @@ export const MusicHelper = {
 	musicNodeStatus,
 	musicPlayerStatus,
 	musicFilters,
+	normalizeMusicSearchEngine,
 	parseSeekTime,
 	postSongRequestPanel,
 	repairMusicPlayer,
@@ -1541,6 +1607,7 @@ export const MusicHelper = {
 	replyMusic,
 	requireSameVoice,
 	recreateMusicPlayer,
+	searchMusicTracks,
 	setupRainlink,
 	updateLivePlayer,
 };
