@@ -253,8 +253,11 @@ function canDeleteMessage(message: Message): boolean {
 
 	const channel = message.channel as {
 		permissionsFor?: (member: GuildMember) => PermissionsBitField | null;
-	};
-	const permissions = channel.permissionsFor?.(message.guild.members.me);
+	} | null;
+	const permissions =
+		typeof channel?.permissionsFor === 'function'
+			? channel.permissionsFor(message.guild.members.me)
+			: null;
 	return Boolean(
 		permissions?.has([
 			PermissionsBitField.Flags.ViewChannel,

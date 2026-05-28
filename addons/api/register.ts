@@ -7,9 +7,18 @@ import http, {
 } from 'node:http';
 import path from 'node:path';
 import {
+	ActionRowBuilder,
+	ButtonBuilder,
+	ButtonStyle,
 	ChannelType,
+	ContainerBuilder,
+	MessageFlags,
+	SeparatorBuilder,
+	SeparatorSpacingSize,
+	TextDisplayBuilder,
 	type Guild,
 	type GuildTextBasedChannel,
+	type MessageActionRowComponentBuilder,
 } from 'discord.js';
 import {
 	RainlinkLoopMode,
@@ -37,7 +46,6 @@ import {
 	isMusicIdAllowed,
 	loopModeFromConfig,
 	postSongRequestPanel,
-	searchMusicTracks,
 	setupRainlink,
 	updateLivePlayer,
 } from '../music/helpers';
@@ -523,6 +531,29 @@ function sendJson(
 		...headers,
 	});
 	res.end(JSON.stringify(payload));
+}
+
+function runBackgroundMusicTask(
+	client: PriyxClient,
+	label: string,
+	task: Promise<unknown>,
+): void {
+	void task.catch((error) => {
+		client.addonLogger('api').warn(`${label} failed:`, error);
+	});
+}
+
+function destroyEmptyDashboardPlayer(
+	client: PriyxClient,
+	player: RainlinkPlayer,
+	label: string,
+): void {
+	if (player.queue.current || player.queue.size > 0 || player.playing) {
+		return;
+	}
+
+	client.rainlink?.players.delete(player.guildId);
+	runBackgroundMusicTask(client, label, player.destroy());
 }
 
 function redirect(res: ServerResponse, location: string, headers = {}): void {
@@ -1031,7 +1062,7 @@ async function patchModule(
 		const songRequests = songRequestsConfig(config as MusicModuleConfig);
 		const channelId = String(songRequests.channel ?? '').trim();
 		if (songRequests.enabled !== false && channelId) {
-			await postSongRequestPanel(
+			await postSongRequestPanelSafe(
 				ctx.client,
 				guildId,
 				channelId,
@@ -1066,6 +1097,54 @@ function requesterId(track?: RainlinkTrack | null): string | null {
 		: null;
 }
 
+function validYoutubeId(value: string | null | undefined): string | null {
+	const id = String(value ?? '').trim();
+	return /^[a-zA-Z0-9_-]{11}$/.test(id) ? id : null;
+}
+
+function youtubeIdFromUrl(value: string | null | undefined): string | null {
+	const raw = String(value ?? '').trim();
+	if (!raw) {
+		return null;
+	}
+
+	try {
+		const url = new URL(raw);
+		const host = url.hostname.toLowerCase().replace(/^www\./, '');
+		if (host === 'youtu.be') {
+			return validYoutubeId(url.pathname.split('/').filter(Boolean)[0]);
+		}
+
+		if (host.endsWith('youtube.com') || host.endsWith('music.youtube.com')) {
+			const direct = validYoutubeId(url.searchParams.get('v'));
+			if (direct) {
+				return direct;
+			}
+
+			const [section, id] = url.pathname.split('/').filter(Boolean);
+			if (['embed', 'shorts', 'live'].includes(section ?? '')) {
+				return validYoutubeId(id);
+			}
+		}
+	} catch {
+		return null;
+	}
+
+	return null;
+}
+
+function musicArtworkUrl(track: RainlinkTrack): string | null {
+	const direct = String(track.artworkUrl ?? '').trim();
+	if (direct) {
+		return direct;
+	}
+
+	const uri = track.uri || track.realUri || null;
+	const youtubeId =
+		youtubeIdFromUrl(uri) || (uri ? null : validYoutubeId(track.identifier));
+	return youtubeId ? `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg` : null;
+}
+
 function serializeMusicTrack(
 	track: RainlinkTrack | null | undefined,
 	index?: number,
@@ -1085,7 +1164,7 @@ function serializeMusicTrack(
 			: formatTrackDuration(track.duration),
 		isStream: Boolean(track.isStream),
 		uri: track.uri || track.realUri || null,
-		artworkUrl: track.artworkUrl || null,
+		artworkUrl: musicArtworkUrl(track),
 		requesterId: requesterId(track),
 	};
 }
@@ -1279,6 +1358,139 @@ function songRequestsConfig(
 	return isRecordValue(config.songRequests) ? config.songRequests : {};
 }
 
+function songRequestPanelText(
+	config: MusicModuleConfig,
+	key: string,
+	fallback: string,
+): string {
+	const value = songRequestsConfig(config)[key];
+	return typeof value === 'string' && value.trim() ? value.trim() : fallback;
+}
+
+function apiTextDisplay(content: string): TextDisplayBuilder {
+	return new TextDisplayBuilder().setContent(content);
+}
+
+function apiSeparator(): SeparatorBuilder {
+	return new SeparatorBuilder()
+		.setDivider(true)
+		.setSpacing(SeparatorSpacingSize.Small);
+}
+
+function apiActionRow(
+	row: ActionRowBuilder<ButtonBuilder>,
+): ActionRowBuilder<MessageActionRowComponentBuilder> {
+	return row as unknown as ActionRowBuilder<MessageActionRowComponentBuilder>;
+}
+
+function apiMusicButton(
+	customId: string,
+	label: string,
+	style = ButtonStyle.Secondary,
+): ButtonBuilder {
+	return new ButtonBuilder()
+		.setCustomId(customId)
+		.setLabel(label)
+		.setStyle(style)
+		.setDisabled(true);
+}
+
+function apiSongRequestPanel(config: MusicModuleConfig): ContainerBuilder {
+	const buttonConfig = isRecordValue(songRequestsConfig(config).buttons)
+		? (songRequestsConfig(config).buttons as Record<string, ModuleValue>)
+		: {};
+	const enabled = (key: string) => buttonConfig[key] !== false;
+	const definitions = [
+		['previous', 'music:player:previous', 'Previous'],
+		['rewind', 'music:player:rewind', 'Rewind'],
+		['pause', 'music:player:pause', 'Pause'],
+		['forward', 'music:player:forward', 'Forward'],
+		['skip', 'music:player:skip', 'Skip'],
+		['volumeDown', 'music:player:volumeDown', 'Volume-'],
+		['loop', 'music:player:loop', 'Loop: Off'],
+		['stop', 'music:player:stop', 'Stop', ButtonStyle.Danger],
+		['shuffle', 'music:player:shuffle', 'Shuffle'],
+		['volumeUp', 'music:player:volumeUp', 'Volume+'],
+	] as const;
+	const container = new ContainerBuilder()
+		.setAccentColor(0x1db954)
+		.addTextDisplayComponents(
+			apiTextDisplay(
+				`## ${songRequestPanelText(config, 'idleTitle', 'Music Player')}`,
+			),
+		)
+		.addSeparatorComponents(apiSeparator())
+		.addTextDisplayComponents(
+			apiTextDisplay(
+				songRequestPanelText(
+					config,
+					'idleDescription',
+					'No music is currently playing. Join a voice channel and send a song name or link to start playing.',
+				),
+			),
+		)
+		.addTextDisplayComponents(
+			apiTextDisplay(
+				`> ${songRequestPanelText(
+					config,
+					'requestPlaceholder',
+					'Type a song name or link in this channel.',
+				)}`,
+			),
+		);
+
+	const buttons = definitions.filter(([key]) => enabled(key));
+	for (let index = 0; index < buttons.length; index += 5) {
+		container.addActionRowComponents(
+			apiActionRow(
+				new ActionRowBuilder<ButtonBuilder>().addComponents(
+					buttons
+						.slice(index, index + 5)
+						.map(([, customId, label, style]) =>
+							apiMusicButton(customId, label, style ?? ButtonStyle.Secondary),
+						),
+				),
+			),
+		);
+	}
+
+	return container
+		.addSeparatorComponents(apiSeparator())
+		.addTextDisplayComponents(apiTextDisplay('Priyx song requests'));
+}
+
+async function postSongRequestPanelSafe(
+	client: PriyxClient,
+	guildId: string,
+	channelId: string,
+	config: MusicModuleConfig,
+	forceSend = false,
+): Promise<void> {
+	const helper = postSongRequestPanel as unknown;
+	if (typeof helper === 'function') {
+		await (helper as typeof postSongRequestPanel)(
+			client,
+			guildId,
+			channelId,
+			config,
+			forceSend,
+		);
+		return;
+	}
+
+	const channel =
+		client.channels.cache.get(channelId) ??
+		(await client.channels.fetch(channelId).catch(() => null));
+	if (!channel || !('send' in channel) || typeof channel.send !== 'function') {
+		return;
+	}
+
+	await channel.send({
+		components: [apiSongRequestPanel(config)],
+		flags: MessageFlags.IsComponentsV2 as const,
+	});
+}
+
 function firstMusicTextChannel(
 	guild: Guild,
 	config: MusicModuleConfig,
@@ -1300,6 +1512,72 @@ function firstMusicTextChannel(
 			Boolean(channel?.isTextBased() && !channel.isDMBased()),
 		) ?? null
 	);
+}
+
+function normalizeDashboardSearchEngine(value?: unknown): string {
+	const engine = String(value ?? 'youtube')
+		.trim()
+		.toLowerCase()
+		.replace(/[\s-]+/g, '_');
+
+	if (
+		engine === 'youtube_music' ||
+		engine === 'youtubemusic' ||
+		engine === 'ytm'
+	) {
+		return 'youtubeMusic';
+	}
+
+	if (engine === 'soundcloud' || engine === 'sound_cloud' || engine === 'sc') {
+		return 'soundcloud';
+	}
+
+	return 'youtube';
+}
+
+function dashboardSearchEngines(value?: unknown): string[] {
+	const preferred = normalizeDashboardSearchEngine(value);
+	return [preferred, 'youtube', 'youtubeMusic', 'soundcloud'].filter(
+		(engine, index, engines) => engines.indexOf(engine) === index,
+	);
+}
+
+async function searchDashboardMusicTracks(
+	client: PriyxClient,
+	query: string,
+	config: MusicModuleConfig,
+	requester: unknown,
+) {
+	if (!client.rainlink) {
+		throw new Error('Rainlink is not configured.');
+	}
+
+	let lastResult: Awaited<
+		ReturnType<NonNullable<PriyxClient['rainlink']>['search']>
+	> | null = null;
+	let lastError: unknown = null;
+	for (const engine of dashboardSearchEngines(config.searchEngine)) {
+		const result = await client.rainlink
+			.search(query, { requester, engine })
+			.catch((error) => {
+				lastError = error;
+				return null;
+			});
+		if (result?.tracks.length) {
+			return result;
+		}
+		if (result) {
+			lastResult = result;
+		}
+	}
+
+	if (lastResult) {
+		return lastResult;
+	}
+
+	throw lastError instanceof Error
+		? lastError
+		: new Error('Music search failed. Check the Lavalink node.');
 }
 
 function musicPlayerPayload(client: PriyxClient, guildId: string) {
@@ -1331,6 +1609,18 @@ function musicPlayerPayload(client: PriyxClient, guildId: string) {
 						.map((track, index) => serializeMusicTrack(track, index + 1)),
 				}
 			: null,
+	};
+}
+
+function inactiveMusicPlayerPayload(client: PriyxClient, guildId: string) {
+	const state = getMusicState(guildId);
+	return {
+		connected: Boolean(client.rainlink),
+		active: false,
+		autoplay: state.autoplay,
+		filter: state.filter,
+		suggestions: [],
+		player: null,
 	};
 }
 
@@ -1380,7 +1670,7 @@ async function sendMusicPlayer(
 
 	setupRainlink(ctx.client);
 	const config = await ctx.client.guildModule(guildId, 'music');
-	await ensureMusicRecommendations(ctx.client, guildId, config);
+	void ensureMusicRecommendations(ctx.client, guildId, config);
 	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 }
 
@@ -1412,7 +1702,7 @@ async function sendMusicSearch(
 		id: access.session.user.id,
 		username: access.session.user.username,
 	};
-	const result = await searchMusicTracks(
+	const result = await searchDashboardMusicTracks(
 		ctx.client,
 		query,
 		config,
@@ -1555,24 +1845,45 @@ async function patchMusicPlayer(
 			textChannel.id,
 			member.voice.channel,
 			config,
-		);
+		).catch((error) => {
+			sendJson(res, 409, {
+				error:
+					error instanceof Error
+						? error.message
+						: 'Could not create the music player.',
+			});
+			return null;
+		});
+		if (!player) {
+			return;
+		}
 		const requester = {
 			id: access.session.user.id,
 			username: access.session.user.username,
 		};
-		const result = await searchMusicTracks(
+		const result = await searchDashboardMusicTracks(
 			ctx.client,
 			query,
 			config,
 			requester,
 		).catch(() => null);
 		if (!result) {
+			destroyEmptyDashboardPlayer(
+				ctx.client,
+				player,
+				'Dashboard music search cleanup',
+			);
 			sendJson(res, 502, {
 				error: 'Music search failed. Check the Lavalink node.',
 			});
 			return;
 		}
 		if (result.tracks.length === 0) {
+			destroyEmptyDashboardPlayer(
+				ctx.client,
+				player,
+				'Dashboard empty search cleanup',
+			);
 			sendJson(res, 404, { error: 'No playable tracks were found.' });
 			return;
 		}
@@ -1580,6 +1891,11 @@ async function patchMusicPlayer(
 		const maxQueueSize = Number(config.maxQueueSize ?? 500);
 		const availableSlots = Math.max(0, maxQueueSize - player.queue.totalSize);
 		if (availableSlots <= 0) {
+			destroyEmptyDashboardPlayer(
+				ctx.client,
+				player,
+				'Dashboard full queue cleanup',
+			);
 			sendJson(res, 409, {
 				error: `This server queue is limited to ${maxQueueSize} tracks.`,
 			});
@@ -1594,10 +1910,21 @@ async function patchMusicPlayer(
 		if (config.autoShuffle && player.queue.size > 1) {
 			player.queue.shuffle();
 		}
-		await ensureMusicPlayback(player);
-		await updateLivePlayer(ctx.client, player).catch(() => undefined);
-		await ensureMusicRecommendations(ctx.client, guildId, config);
-		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+		const playbackTask = ensureMusicPlayback(player);
+		runBackgroundMusicTask(
+			ctx.client,
+			'Dashboard music playback start',
+			playbackTask.then(async () => {
+				await updateLivePlayer(ctx.client, player).catch(() => undefined);
+				await ensureMusicRecommendations(ctx.client, guildId, config);
+			}),
+		);
+		const payload = musicPlayerPayload(ctx.client, guildId);
+		if (payload.player) {
+			payload.player.playing = true;
+			payload.player.paused = false;
+		}
+		sendJson(res, 200, payload);
 		return;
 	}
 
@@ -1609,22 +1936,45 @@ async function patchMusicPlayer(
 		return;
 	}
 
+	let refreshLivePlayer = true;
+	let refreshRecommendations = true;
 	if (action === 'pause') {
 		const paused =
 			typeof body.paused === 'boolean' ? body.paused : !player.paused;
-		await player.setPause(paused);
+		runBackgroundMusicTask(
+			ctx.client,
+			'Dashboard music pause',
+			player.setPause(paused),
+		);
+		player.paused = paused;
+		player.playing = !paused;
 	} else if (action === 'previous') {
-		await player.previous();
+		refreshLivePlayer = false;
+		refreshRecommendations = false;
+		runBackgroundMusicTask(
+			ctx.client,
+			'Dashboard music previous',
+			player.previous(),
+		);
 	} else if (action === 'rewind' || action === 'forward') {
 		const current = player.queue.current;
 		if (current && !current.isStream) {
 			const delta = action === 'rewind' ? -10_000 : 10_000;
-			await player.seek(
-				Math.min(current.duration, Math.max(0, player.position + delta)),
+			const position = Math.min(
+				current.duration,
+				Math.max(0, player.position + delta),
 			);
+			runBackgroundMusicTask(
+				ctx.client,
+				`Dashboard music ${action}`,
+				player.seek(position),
+			);
+			player.position = position;
 		}
 	} else if (action === 'skip') {
-		await player.skip();
+		refreshLivePlayer = false;
+		refreshRecommendations = false;
+		runBackgroundMusicTask(ctx.client, 'Dashboard music skip', player.skip());
 	} else if (action === 'shuffle') {
 		player.queue.shuffle();
 	} else if (action === 'loop') {
@@ -1642,30 +1992,61 @@ async function patchMusicPlayer(
 			150,
 			Math.max(1, Number(body.volume ?? player.volume)),
 		);
-		await player.setVolume(volume);
+		runBackgroundMusicTask(
+			ctx.client,
+			'Dashboard music volume',
+			player.setVolume(volume),
+		);
+		player.volume = volume;
 	} else if (action === 'volumeDown' || action === 'volumeUp') {
 		const delta = action === 'volumeDown' ? -10 : 10;
-		await player.setVolume(Math.min(150, Math.max(1, player.volume + delta)));
+		const volume = Math.min(150, Math.max(1, player.volume + delta));
+		runBackgroundMusicTask(
+			ctx.client,
+			`Dashboard music ${action}`,
+			player.setVolume(volume),
+		);
+		player.volume = volume;
 	} else if (action === 'seek') {
 		const position = Math.max(0, Number(body.position ?? 0));
 		if (player.queue.current && !player.queue.current.isStream) {
-			await player.seek(Math.min(position, player.queue.current.duration));
+			const nextPosition = Math.min(position, player.queue.current.duration);
+			runBackgroundMusicTask(
+				ctx.client,
+				'Dashboard music seek',
+				player.seek(nextPosition),
+			);
+			player.position = nextPosition;
 		}
 	} else if (action === 'stop') {
 		const current = player.queue.current;
+		const state = getMusicState(guildId);
+		state.suggestions = [];
+		state.lastTrack = null;
 		player.setLoop(RainlinkLoopMode.NONE);
 		player.queue.clear();
-		await endLivePlayer(ctx.client, player, current).catch(() => undefined);
-		await player.destroy();
-		sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
+		ctx.client.rainlink?.players.delete(guildId);
+		runBackgroundMusicTask(
+			ctx.client,
+			'Dashboard music stop',
+			(async () => {
+				await endLivePlayer(ctx.client, player, current).catch(() => undefined);
+				await player.destroy();
+			})(),
+		);
+		sendJson(res, 200, inactiveMusicPlayerPayload(ctx.client, guildId));
 		return;
 	} else {
 		sendJson(res, 400, { error: 'Unknown music player action.' });
 		return;
 	}
 
-	await updateLivePlayer(ctx.client, player).catch(() => undefined);
-	void ensureMusicRecommendations(ctx.client, guildId, config);
+	if (refreshLivePlayer) {
+		void updateLivePlayer(ctx.client, player).catch(() => undefined);
+	}
+	if (refreshRecommendations) {
+		void ensureMusicRecommendations(ctx.client, guildId, config);
+	}
 	sendJson(res, 200, musicPlayerPayload(ctx.client, guildId));
 }
 
@@ -1707,7 +2088,13 @@ async function createSongRequestChannel(
 	const updated = await ctx.client.guildModule(guildId, 'music');
 	let panelPosted = false;
 	try {
-		await postSongRequestPanel(ctx.client, guildId, channel.id, updated, true);
+		await postSongRequestPanelSafe(
+			ctx.client,
+			guildId,
+			channel.id,
+			updated,
+			true,
+		);
 		panelPosted = true;
 	} catch (error) {
 		ctx.client

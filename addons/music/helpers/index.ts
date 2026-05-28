@@ -816,12 +816,20 @@ export async function endLivePlayer(
 export async function ensureMusicPlayback(
 	player: RainlinkPlayer,
 ): Promise<void> {
+	if (player.state === RainlinkPlayerState.DESTROYED) {
+		throw new Error('Music player was destroyed before playback could start.');
+	}
+
 	if (!player.queue.current && player.queue.size === 0) {
 		return;
 	}
 
 	if (!player.playing) {
 		await player.play();
+	}
+
+	if (Number(player.state) === RainlinkPlayerState.DESTROYED) {
+		throw new Error('Music player was destroyed during playback start.');
 	}
 
 	if (player.paused) {
@@ -856,7 +864,13 @@ export function getMusicPlayer(
 	client: PriyxClient,
 	guildId: string,
 ): RainlinkPlayer | null {
-	return client.rainlink?.players.get(guildId) ?? null;
+	const player = client.rainlink?.players.get(guildId) ?? null;
+	if (player?.state === RainlinkPlayerState.DESTROYED) {
+		client.rainlink?.players.delete(guildId);
+		return null;
+	}
+
+	return player;
 }
 
 export function getMusicState(guildId: string): RuntimeState {
@@ -966,12 +980,20 @@ export async function createOrGetMusicPlayer(
 
 	const existing = getMusicPlayer(client, guild.id);
 	if (existing) {
-		if (existing.voiceId && existing.voiceId !== voiceChannel.id) {
-			throw new Error(`Music is already active in <#${existing.voiceId}>.`);
-		}
-
 		if (existing.state !== RainlinkPlayerState.CONNECTED || !existing.voiceId) {
 			await existing.destroy().catch(() => undefined);
+			client.rainlink.players.delete(guild.id);
+		} else if (existing.voiceId !== voiceChannel.id) {
+			if (
+				existing.queue.current ||
+				existing.queue.size > 0 ||
+				existing.playing
+			) {
+				throw new Error(`Music is already active in <#${existing.voiceId}>.`);
+			}
+
+			await existing.destroy().catch(() => undefined);
+			client.rainlink.players.delete(guild.id);
 		} else {
 			existing.setTextChannel(textId);
 			return existing;
@@ -1333,13 +1355,18 @@ async function handleAutoplay(
 		return false;
 	}
 
-	const recommendations = await fetchRecommendations(
-		client,
-		player,
-		reference,
-		5,
-	).catch(() => []);
-	const next = recommendations[0];
+	let next = state.suggestions.find(
+		(track) => track.identifier !== reference.identifier,
+	);
+	if (!next) {
+		const recommendations = await fetchRecommendations(
+			client,
+			player,
+			reference,
+			5,
+		).catch(() => []);
+		next = recommendations[0];
+	}
 	if (!next) {
 		return false;
 	}
@@ -1511,16 +1538,30 @@ export function setupRainlink(client: PriyxClient): void {
 		log.info(
 			`Track started in guild ${player.guildId}: ${safeTitle(current)} (${current.identifier ?? 'no identifier'}).`,
 		);
-		state.suggestions = await fetchRecommendations(
-			client,
-			player,
-			current,
-			Number(guildConfig.ui?.suggestionLimit ?? 5),
-		).catch(() => []);
 		if (guildConfig.announceTrackStart !== false) {
-			await updateLivePlayer(client, player).catch((error) => {
+			void updateLivePlayer(client, player).catch((error) => {
 				log.warn('Failed to send live player:', error);
 			});
+		}
+		if (guildConfig.ui?.showSuggestions !== false) {
+			void fetchRecommendations(
+				client,
+				player,
+				current,
+				Number(guildConfig.ui?.suggestionLimit ?? 5),
+			)
+				.then((suggestions) => {
+					const active = getMusicPlayer(client, player.guildId);
+					if (active?.queue.current?.identifier !== current.identifier) {
+						return;
+					}
+
+					state.suggestions = suggestions;
+					return updateLivePlayer(client, player).catch((error) => {
+						log.warn('Failed to update suggestions:', error);
+					});
+				})
+				.catch(() => undefined);
 		}
 	});
 	rainlink.on('trackEnd', (player, track) => {
